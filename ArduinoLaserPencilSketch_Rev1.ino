@@ -104,8 +104,10 @@ const byte BurnButton = 9;
 const byte JogLeftButtonPin = 2;
 const byte JogRightButtonPin = 19;
 const byte StepperDirPin = 31;
-const byte StepperEnablePin = 32;
+const byte StepperEnablePin = 30;
 const byte StepperPulseOutputPin = 33;
+#define STEPPER_MS1 32
+#define STEPPER_MS2 35
 const byte BeeperPin = 25;
 const byte RightLimitSw = 21;
 const byte LeftLimitSw = 20;
