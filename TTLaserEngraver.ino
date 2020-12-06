@@ -11,7 +11,7 @@ PS2Keyboard keyboard;
 LiquidCrystal_I2C lcd(0x27,20,4);  // set the LCD address to 0x27 for a 20 chars and 4 line display
 
 void setup() {
-    lcd.init();                      // initialize the lcd
+    lcd.begin();                      // initialize the lcd
     lcd.blink_on();
     lcd.backlight();
     
