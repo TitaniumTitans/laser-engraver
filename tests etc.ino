@@ -114,7 +114,9 @@ void lcd_scroll() {
     lcd.clear();
 
     // Clear the (soon to be) last line:
-    lcd_screen[lcd_screen_wrap][0] = '\0';
+    for (int x = 0; x < lcd_width; x++) {
+        lcd_screen[lcd_screen_wrap][x] = '\0';
+    }
     // Scroll:
     lcd_screen_wrap = (lcd_screen_wrap+1) % lcd_height;
 
