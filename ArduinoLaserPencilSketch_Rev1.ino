@@ -43,9 +43,14 @@ Available interrupt pins: 2,3,21,20,19,18 (int0,1,2,3,4,5)
 
 #include <PS2Keyboard.h>         //Keyboard
 #include <SPI.h>                 //DACs
+#include <LiquidCrystal_I2C.h>
 //#include "MegunoLink.h"          //For testing only
-#include "SoftwareSerial.h"      //Serial Monitor
 PS2Keyboard keyboard;
+
+// LCD over I²C screen:
+const uint8_t lcd_width = 20;
+const uint8_t lcd_height = 4;
+LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height);  // set the LCD address to 0x27 for a 20 chars and 4 line display
  
 //Declare User Values
 int KeyboardInterStrokeDelay = 200;      //milliseconds
@@ -258,7 +263,6 @@ delay(10);
 pinMode(CharSizePin, INPUT);
 pinMode(yOffsetPin, INPUT);
 pinMode(BurnDelayPin, INPUT);
-pinMode(SparePotPin, INPUT);
 pinMode(CharSpacePin, INPUT);
 pinMode(StopButton, INPUT);
 pinMode(BurnButton, INPUT);
@@ -291,11 +295,13 @@ SPI.setClockDivider(SPI_CLOCK_DIV128);
  delay(100);
  analogWrite(pwmOutPin, 0);  //pre-shuts laser off, double safety
   
- //The LCD is automatically assigned Pin1(Tx) when Serial.begin() is used.
+ /*//The LCD is automatically assigned Pin1(Tx) when Serial.begin() is used.
  //The Seetron LCD requires an INVERTED 9600 baud serial signal from the Arduino
  Serial.begin(9600); //for Serial Monitor in the IDE & LCD, not the keyboard
  Serial.write(12);   //clear LCD screen
- Serial.write(4);    //shut off LCD cursor
+ Serial.write(4);    //shut off LCD cursor*/
+
+ lcd_init();
  
  ResetDACs();
  Beep(2);            //system is booted up and ready
@@ -322,11 +328,17 @@ void loop(){
 
 void Start(){
   
-Serial.write(12);         //clear LCD screen  
+/*Serial.write(12);         //clear LCD screen  
 Serial.println("START:TYPE 1,2 OR 3");
 Serial.println("1.NEW MESSAGE");  
 Serial.println("2.REPEAT BURN");
-Serial.println("3.CHARACTER ADJUST"); 
+Serial.println("3.CHARACTER ADJUST"); */
+lcd_clear();
+lcd_println("START:TYPE 1,2 OR 3");
+lcd_println("1.NEW MESSAGE");  
+lcd_println("2.REPEAT BURN");
+lcd_print("3.CHARACTER ADJUST");
+
 
 Loop1:
 if ((digitalRead(JogLeftButtonPin)) == 0) ManualJogLeftFunc();
@@ -346,14 +358,14 @@ if (keyboard.available()){
            
     if (c == 50)         // 2. REPEAT BURN
       {
-       Serial.write(12);     
+       lcd_clear();
        Beep(1);
        BurnMessageSequence();
       }
       
     if (c == 51)        // 3. CHARACTER ADJUST
       {
-       Serial.write(12); 
+       lcd_clear();
        Beep(1);    
        AdjCharSizes1();
       }
@@ -374,22 +386,22 @@ void MessageFormatting(){
  byte ch;
  byte storedChar;
  
- Serial.write(12);   //clear LCD screen 
- Serial.println("-MESSAGE PARAMETERS"); 
- Serial.println(" 40 CHAR MAXIMUM = "); 
- Serial.println(" 2 LINES ON LCD");
- Serial.print(" <ENTER>");
- WaitForEnterKey();                            
+ lcd_clear();
+ lcd_println("-MESSAGE PARAMETERS"); 
+ lcd_println(" 40 CHAR MAXIMUM = "); 
+ lcd_println(" 2 LINES ON LCD");
+ lcd_print(" <ENTER>");
+ WaitForEnterKey();
  Beep(1);
  
- Serial.write(12);   //clear LCD screen 
- Serial.println("-USE BACKSPACE FOR");
- Serial.println(" CORRECTIONS");
- Serial.print("-DO <ENTER> NOW TO");
- Serial.write(16);
- Serial.write(124);   //move cursor to line 4
- Serial.print(" OPEN TYPING WINDOW");
- WaitForEnterKey();                            
+ lcd_clear();
+ lcd_println("-USE BACKSPACE FOR");
+ lcd_println(" CORRECTIONS");
+ lcd_println("-DO <ENTER> NOW TO"); // This originally had "Serial.print(". I don't know what the next line two lines were for:
+ /*Serial.write(16);
+ Serial.write(124);   //move cursor to line 4*/
+ lcd_print(" OPEN TYPING WINDOW");
+ WaitForEnterKey();
  Beep(1);
  }
   
@@ -400,8 +412,8 @@ void MessageFormatting(){
  int ch;
  char ch1;
  byte KeyFlag = 0;
- Serial.write(12);   //clear LCD screen 
- Serial.write(6);   //put blinking block cursor on LCD
+ lcd_clear();
+ lcd.blink();
   
  MessLoop:
  if (keyboard.available())
@@ -956,3 +968,79 @@ void SetRightJogDir(){
 //                                                       END OF PROGRAM
 //**************************************************************************************************************************************
 //**************************************************************************************************************************************
+// [Or is it...?]
+
+// Word-wrap LCD:
+uint8_t lcd_y = 0; // which line
+uint8_t lcd_x = 0;
+
+char lcd_screen[lcd_height][lcd_width+1]; // (lcd_width+1, for the \0 at the line end)
+uint8_t lcd_screen_wrap = 0;
+
+void lcd_init() {
+    lcd.init();
+    lcd.backlight();
+    /*for (int i = 0; i < lcd_width*lcd_height) {
+        lcd_screen[i] = '\0';
+    }*/
+}
+void lcd_println(const char text[]) {
+    lcd_print(text);
+    lcd_lineBreak();
+}
+void lcd_print(const char text[]) {
+    char currentChar;
+    for (int i = 0; ; i++) {
+        currentChar = text[i];
+        if (currentChar == '\0') break;
+        
+        if (currentChar == '\n') {
+            lcd_lineBreak();
+            continue;
+        }
+
+        // Register the new character in lcd_screen:
+        lcd_screen[(lcd_y+lcd_screen_wrap) % lcd_height][lcd_x] = currentChar;
+        
+        lcd.write(currentChar);
+        lcd_x++;
+
+        // If at right end of screen:
+        if (lcd_x == lcd_width) {
+            lcd_lineBreak();
+        }
+    }
+}
+void lcd_clear() {
+    lcd.clear();
+    lcd_x = 0;
+    lcd_y = 0;
+}
+void lcd_lineBreak() {
+    lcd_x = 0;
+    lcd_y++;
+    if (lcd_y == lcd_height) {
+        // SOMEONE ANYONE HELP WE'RE OUT OF SCREEN 😱😱😱😱
+        // I KNOW!! LCD_SCROLL TO THE RESCUE!!!!!!!!!1
+        lcd_scroll();
+    }
+}
+// Scrolls the display down one line
+void lcd_scroll() {
+    lcd.clear();
+
+    // Clear the (soon to be) last line:
+    for (int x = 0; x < lcd_width; x++) {
+        lcd_screen[lcd_screen_wrap][x] = '\0';
+    }
+    // Scroll:
+    lcd_screen_wrap = (lcd_screen_wrap+1) % lcd_height;
+
+    // Update LCD:
+    for (uint8_t y = 0; y < lcd_height; y++) {
+        lcd.setCursor(0, y);
+        lcd.print(lcd_screen[(y+lcd_screen_wrap) % lcd_height]);
+    }
+    lcd_y--;
+    lcd.setCursor(lcd_x, lcd_y);
+}
