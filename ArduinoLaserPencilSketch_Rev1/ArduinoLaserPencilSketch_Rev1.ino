@@ -126,9 +126,9 @@ const byte SafetySwitchPin = 48;
 
 //keyboard stuff
 //***********************
-const int DataPin = 8;  
-const int IRQpin =  3;   //if the #include PS2Keyboard library is used, pin 3 must be used for the PS2 keyboard interrupt
-char c;                  //or it will not work for all PS-2 keyboards.  Pin 3 = interrupt 1.                       
+const int DataPin = 8;
+const int IRQpin =  2;   //if the #include PS2Keyboard library is used, pin 2 must be used for the PS2 keyboard interrupt
+char c;                  //or it will not work for all PS-2 keyboards.  Pin 2 = interrupt 0.
 
 //CHARACTER ARRAY 
 //Array reads DOWN and ACROSS, CharacterArray[DOWN][ACROSS], [96]DOWN [46]ACROSS, CharacterArray[ASCII letter to be burned][x,y burn dot coordinates]
@@ -282,7 +282,7 @@ pinMode(SafetySwitchPin, INPUT);
 //Interrupt calls
 //****************
 //Available interrupt pins: 2,3,21,20,19,18 (int 0,1,2,3,4,5)
-//attachInterrupt(Keyboard); //Pin  3 = interrupt 1
+//attachInterrupt(Keyboard); //Pin  2 = interrupt 0
 //No other interrupts are used due to noise from stepper
 
 SPI.setClockDivider(SPI_CLOCK_DIV128);
