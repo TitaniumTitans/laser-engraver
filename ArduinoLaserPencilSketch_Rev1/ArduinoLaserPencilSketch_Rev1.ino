@@ -387,7 +387,6 @@ if (keyboard.available()){
     goto Loop1;    
  }
 
-//**********************************************************
 void MessageFormatting(){
 
  int cnt;
@@ -782,181 +781,128 @@ void WaitForEnterKey(){
 //                               FUNCTIONS FOR X-AXIS STAGE STEPPER AND LIMIT SWITCHES
 //********************************************************************************************************************
 
-//******************************************
+/**
+ * Moves the stage enough space for the next letter to be engraved.
+ * 
+ * TODO: Factor this function out, it is *almost* redundant.
+ */
 void MoveStageLeftOneLetterDuringBurn()    //jog one space worth of jogs, approx 1100
 {
   CharSpaceValue = ((analogRead(CharSpacePin)) * 2);   //0 to 1023 
 
-  SetLeftJogDir();
-  for (z=0;z<=CharSpaceValue;z++)    //1100 = Char Space Pot set at 50% = 1023/2 = 512, so multiply x2
-    {
-    JogLeftDuringBurn();
-    } 
+  moveStage(-1 * CharSpaceValue);
   delay(100);
  }
-  
-//********************************************
-void JogLeftDuringBurn(){    //while testing for left limit switch in case there are too many letters,
-                             //or they are too large or spacing between them is too much   
-   SetLeftJogDir();
-   Jog1();
-   if (digitalRead(LeftLimitSw) == LOW)  //left limit switch is tripped
-     {
-      digitalWrite(pwmOutPin, LOW);      //LASER OFF, if ON during burning  
-      Beep(6); 
-      lcd_clear();  //clear LCD 
-      lcd_println("ERROR: STANDBY");
-      lcd_print("BURN STOPPED");
-      y = 6000;   //number of backward steps to take to show burn stopped
-      SetRightJogDir();
-      for (x=0;x<=y;x++)
-        {
-        Jog1();
-        } 
-      Beep(3);
-      //ERROR message; 
-      lcd_clear();  //clear LCD 
-      lcd_println("-STAGE MOVED TOO");
-      lcd_println(" FAR LEFT");
-      lcd_println("-SHORTEN MESSAGE OR");
-      lcd_print("<ENTER>");
-      WaitForEnterKey();
-      Beep(1);
-      lcd_clear();  //clear LCD 
-      lcd_println("-ADJUST CHAR SIZE");
-      lcd_println(" OR SPACING");
-      lcd_println("-START AGAIN");
-      lcd_print("<ENTER>");
-      WaitForEnterKey();
-      Beep(1);
-      Start();
-     }
-  } 
 
-//********************************************
+
+/**
+ * IMPORTANT: Does not function like a normal CNC homing function.
+ * First, this function moves the stage all the way to the right.
+ * Then, the function moves the stage 1000 steps to the left.
+ */
 void Home(){                 
-  
-  SetRightJogDir();
   do
   {
-   Jog1();
+   moveStage(1, false, true);
   }
   while(digitalRead(RightLimitSw) == HIGH); 
-  y = 1000;   //number of backward steps to move stage off limit sw
-  SetLeftJogDir();
-  for (x=0;x<=y;x++)
-    {
-    Jog1();
-    } 
+  moveStage(-1000, false, true)
   Beep(3);
 }
 
-//********************************************
+/**
+ * Invoked upon pressing Home button. Moves the stage all the way to the right, then moves 1000 steps backwards.
+ */
 void ManualHome(){
-  
-  SetRightJogDir();
   do
     {
-    Jog1();
+    moveStage(1, false, true);
     if (digitalRead(RightLimitSw) == LOW)
       {
-      y = 1000;   //number of backward steps to move stage off limit sw
-      SetLeftJogDir();
-      for (x=0;x<=y;x++)
-       {
-       Jog1();
-       } 
+      moveStage(-1000, false, true);
       Beep(3);
       do
       {}
       while(digitalRead(HomeButtonPin) == LOW);  //button lockout loop
-      Start();
+      //Start(); Originally, this function called Start(); again. I'm not sure why exactly.
       }
     }   
   while(digitalRead(RightLimitSw) == HIGH);
 }
 
-//********************************************
+/**
+ * Invoked upon pressing Jog Left button.
+ * TODO: I'd like this function to work a bit differently once we implement microstepping.
+ */
 void ManualJogLeftFunc(){
-  
-  SetLeftJogDir();
-  do
-   {
-   Jog1();
-   if (digitalRead(LeftLimitSw) == 0)
-     {
-     //ExceedLeftLimitMessageAndBackoff
-      lcd_clear();  //clear LCD 
-      lcd_println("ERROR:");
-      lcd_println("-STAGE MOVED TOO FAR");
-      lcd_println(" LEFT, REVERSE"); 
-      lcd_println(" DIRECTION"); 
-      y = 800;   //number of backward steps to move stage off limit sw
-      SetRightJogDir();
-      for (x=0;x<=y;x++)
-       {
-       Jog1();
-       } 
-      Beep(3);
+   moveStage(-1);
       do
       {}
       while(digitalRead(JogLeftButtonPin) == LOW);  //button lockout loop 
-      } 
-   }
-   while(digitalRead(JogLeftButtonPin) == LOW);
   }
 
-//*******************************************
+/**
+ * Invoked upon pressing Jog Right button.
+ * TODO: I'd like this function to work a bit differently once we implement microstepping.
+ */
 void ManualJogRightFunc(){
-  
-  SetRightJogDir();
-  do
-    {
-    Jog1();
-    if (digitalRead(RightLimitSw) == 0)
-      {
-     //ExceedRightLimitMessageAndBackoff
-      lcd_clear();  //clear LCD 
-      lcd_println("ERROR:");
-      lcd_println("-STAGE MOVED TOO FAR");
-      lcd_println(" RIGHT, REVERSE"); 
-      lcd_println(" DIRECTION "); 
-      y = 800;   //number of backward steps to move stage off limit sw
-      SetLeftJogDir();
-      for (x=0;x<=y;x++)
-       {
-       Jog1();
-       } 
-      Beep(3);
+    moveStage(1);
       do
       {}
-      while(digitalRead(JogRightButtonPin) == LOW);   //button lockout loop
-      } 
-    }
-  while(digitalRead(JogRightButtonPin) == LOW);
-}
-
-//********************************************
-void Jog1(){
-  
-  int cnt;
-  for (cnt=1;cnt<=50;cnt++) digitalWrite(StepperPulseOutputPin,HIGH);   //"20" is too short, the motor stalls
-  for (cnt=1;cnt<=50;cnt++)digitalWrite(StepperPulseOutputPin,LOW);      //low pulse duration
-  }
-
-//********************************************
-void SetLeftJogDir(){
-  
-  digitalWrite(StepperEnablePin, LOW);  //enable stepper controller
-  digitalWrite(StepperDirPin, HIGH);
-}
-
-//********************************************
-void SetRightJogDir(){
-  
-  digitalWrite(StepperEnablePin, LOW);  //enable stepper controller
-  digitalWrite(StepperDirPin, LOW);
+      while(digitalRead(JogRightButtonPin) == LOW);   //button lockout loop 
 } 
+
+/**
+ * Moves the stage according to directional input and the number of steps. Steps should be positive for right movement, negative for left movement.
+ * requireErrorMessage should be set to false if used during homing.
+ * ignoreLimits allows the move command to ignore the state of limit switches. Useful for backing off of a limit switch.
+ * 
+ * TODO: Implement Microstepping.
+ */
+void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = false) {
+  (steps > 0)? digitalWrite(StepperDirPin, LOW) : digitalWrite(StepperDirPin, HIGH); //select direction
+  digitalWrite(StepperEnablePin, LOW); // enable stepper controller
+  for (int i = 0; i <= steps; i++){
+    digitalWrite(StepperPulseOutputPin, HIGH);
+    delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
+    digitalWrite(StepperPulseOutputPin, LOW);
+    delay(50);
+    int limits = checkLimits();
+    if (limits != 0 && ignoreLimits == false){
+      if (requireErrorMessage){
+        limitErrorMessage(limits);
+      }
+      break;
+    }
+  }
+}
+/**
+ * Checks the value of both limit switches, and returns 1 if the Right switch is tripped, and -1 if the left is tripped.
+ */
+int checkLimits() {
+  if (digitalRead(RightLimitSw) == 0){
+    return -1;
+  }
+  if (digitalRead(LeftLimitSw) == 0){
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * Because the intended behavior of the limit switches changes depending on the function used (i.e. with homing not needing error messages), this needs to be optional.
+ */
+void limitErrorMessage(int limits){
+    if (limits != 0){
+      digitalWrite(pwmOutPin, LOW); //disable laser output if on
+      lcd_clear();
+      lcd_println("ERROR:");
+      lcd_println("STAGE MOVED TOO FAR");
+      lcd_println(((limits>0)?"LEFT":"RIGHT") + ", REVERSE" );//pick what error message to use
+      lcd_println("DIRECTION");
+      moveStage(800 * limits, false, true); //since checkLimits returns -1 if right switch tripped, it will move -800 steps (or left 800 steps). If left is tripped, then it will move right!
+      Beep(3);
+}
 
 
 //**************************************************************************************************************************************
