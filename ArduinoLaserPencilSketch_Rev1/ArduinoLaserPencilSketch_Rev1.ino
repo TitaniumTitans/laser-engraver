@@ -96,28 +96,40 @@ byte time;
 char time1;
 
 //Declare Pins
-const int XDACSelectPin = 14;
-const int YDACSelectPin = 15;
-const int DACLatch = 53;
-const byte BurnDelayPin = A8;
-const byte CharSpacePin = A9;
-const byte CharSizePin = A11;
-const byte yOffsetPin = A12;        //move beam vertically
-const byte pwmOutPin = 23; // (Laser enable pin)
-const byte StopButton = 10;
-const byte BurnButton = 9;
-const byte JogLeftButtonPin = 2;
-const byte JogRightButtonPin = 19;
-const byte StepperDirPin = 31;
-const byte StepperEnablePin = 30;
-const byte StepperPulseOutputPin = 33;
-const byte stepperMS1 = 32;
-const byte stepperMS2 = 35;
-const byte BeeperPin = 40;
-const byte RightLimitSw = 22;
-const byte LeftLimitSw = 25;
-const byte HomeButtonPin = 11;
-const byte SafetySwitchPin = 48;
+const int XDACSelectPin = 6; //X-SEL
+const int YDACSelectPin = 7; //Y-SEL
+const int DACLatch = 53; //EE-1003 MISO
+
+//trimpots
+const byte BurnDelayPin = A8; //BRN
+const byte CharSpacePin = A9; //CSP
+const byte CharSizePin = A11; //CHR
+const byte yOffsetPin = A12;  //YOFF
+
+
+const byte pwmOutPin = 23; //LASER EN
+
+//buttons
+const byte StopButton = 38; //STP BRN
+const byte BurnButton = 40; //BURN
+const byte JogLeftButtonPin = 34; //STG LEFT
+const byte JogRightButtonPin = 32; //STG RIGHT
+const byte HomeButtonPin = 36; //STG HOME
+
+//stepper
+const byte StepperDirPin = 13; //DIR on EE-1003
+const byte StepperEnablePin = 12; //EN on EE-1003
+const byte StepperPulseOutputPin = 11; //STEP on EE-1003
+
+//limits and beeper
+const byte BeeperPin = 27; //BEEP on EE-1003
+const byte RightLimitSw = 19; //LIM1 on EE-1003
+const byte LeftLimitSw = 18; //LIM2 on EE-1003
+
+const byte stepperMS1 = 10; //we are removing microstepping correct?
+const byte stepperMS2 = 9;
+
+const byte SafetySwitchPin = 48; //Unused.
 //const byte ExhaustFanPin = 49;
 
 //Data out pin = 51, MOSI Pin,    SPI routine specifies it    
@@ -126,8 +138,10 @@ const byte SafetySwitchPin = 48;
 
 //keyboard stuff
 //***********************
-const int DataPin = 8;
-const int IRQpin =  2;   //if the #include PS2Keyboard library is used, pin 2 must be used for the PS2 keyboard interrupt
+const int DataPin = 8; //DATA on EE-1003
+const int IRQpin =  2; //CLK on EE-1003
+
+//if the #include PS2Keyboard library is used, pin 2 must be used for the PS2 keyboard interrupt
 char c;                  //or it will not work for all PS-2 keyboards.  Pin 2 = interrupt 0.
 
 //CHARACTER ARRAY 
