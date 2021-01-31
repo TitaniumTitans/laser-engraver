@@ -308,12 +308,6 @@ SPI.setClockDivider(SPI_CLOCK_DIV128);
  
  delay(100);
  analogWrite(pwmOutPin, 0);  //pre-shuts laser off, double safety
-  
- /*//The LCD is automatically assigned Pin1(Tx) when Serial.begin() is used.
- //The Seetron LCD requires an INVERTED 9600 baud serial signal from the Arduino
- Serial.begin(9600); //for Serial Monitor in the IDE & LCD, not the keyboard
- Serial.write(12);   //clear LCD screen
- Serial.write(4);    //shut off LCD cursor*/
 
  lcd_init();
  
@@ -451,8 +445,7 @@ void MessageFormatting(){
      Beep(3);
      goto MessLoop;
      }
-          
-    Serial.print(char(ch));  
+    lcd_print(String(char(ch)));  
     Beep(1);
     
     delay(KeyboardInterStrokeDelay); //typ: 200ms, the keyboard seems to lockup or 
@@ -463,7 +456,7 @@ void MessageFormatting(){
     
 goto MessLoop;
 NewMessDone:
-Serial.write(4);   //turn off LCD cursor
+//Serial.write(4);   //turn off LCD cursor
 Beep(2);
 delay(300);
 NumberOfChars = cnt; 
@@ -476,23 +469,21 @@ void BurnMessageSequence(){
   
  byte ch; 
  
- Serial.write(12);   //clear LCD screen
- Serial.println("-STANDBY: WAIT FOR");
- Serial.println(" STAGE TO STOP");
+ lcd_clear();   //clear LCD screen
+ lcd_println("-STANDBY: WAIT FOR");
+ lcd_println(" STAGE TO STOP");
  Home();           //move stage to Home(right) position //******************************************************************************************
  Beep(1);
- Serial.write(12);   //clear LCD screen
- Serial.println("-MOUNT PENCIL"); 
- Serial.println("-PUT ON GOOGLES"); 
- Serial.print("-PUSH BURN BUTTON OR");
- Serial.write(16);
- Serial.write(124);   //move cursor to line 4
- Serial.print(" HOLD STOP TO QUIT");
+ lcd_clear();   //clear LCD screen
+ lcd_println("-MOUNT PENCIL"); 
+ lcd_println("-PUT ON GOOGLES"); 
+ lcd_println("-PUSH BURN BUTTON OR");
+ lcd_print(" HOLD STOP TO QUIT");
  do
  {}
  while (digitalRead(BurnButton) == 1);
  Beep(1); 
- Serial.write(12);
+ lcd_clear();
  
 //*******************************
 //turn on laser, start burning
@@ -501,10 +492,10 @@ void BurnMessageSequence(){
  BurnMessage(); 
     
  Beep(3);
- Serial.write(12);  //clear screen 
- Serial.println("-BURN CYCLE DONE");
- Serial.println("-REMOVE PENCIL");
- Serial.println("<ENTER>");
+ lcd_clear();  //clear screen 
+ lcd_println("-BURN CYCLE DONE");
+ lcd_println("-REMOVE PENCIL");
+ lcd_println("<ENTER>");
  WaitForEnterKey();
  Beep(1);
  Start();
@@ -530,7 +521,7 @@ void BurnMessage(){
     AscCode = MessageTable[bb];             //Message table has a string of ASCII numbers to print, A = 65, a = 97 but it prints A
     if (AscCode == 13) goto BurnMessDone;   //13 = enter key
     //AscLetter = AscCode;
-    Serial.print(char(AscCode));
+    lcd_print(String(char(AscCode)));
     ArrayPosition = (AscCode - 32);    //offset for CharacterArray (ASCII chars start at 32, CharacterArray starts at 0)
     LetterIndex = ArrayPosition;       //vertical index for CharacterArray
     BurnOneLetter();                   //writing each letter as it is called
@@ -555,9 +546,9 @@ if (digitalRead(StopButton) == LOW)         //check for Stop button
   {
   Beep(3); 
   digitalWrite(pwmOutPin, LOW);  //turn laser off, if not off
-  Serial.write(12);  //clear screen 
-  Serial.println("BURN HALTED:");
-  Serial.print("<ENTER>");
+  lcd_clear();  //clear screen 
+  lcd_println("BURN HALTED:");
+  lcd_print("<ENTER>");
   WaitForEnterKey();
   Beep(1);
   //digitalWrite(ExhaustFanPin, LOW);
@@ -659,26 +650,25 @@ void AdjCharSizes1(){
  Beep(1);
  //parameter adjustment screen
  //*****************************
- Serial.write(12);   //clear LCD screen
- Serial.println("ADJUST AS NEEDED:");
+ lcd_clear();   //clear LCD screen
+ lcd_println("ADJUST AS NEEDED:");
  c=0;
  do{
  //display Burn Time so it can be adjusted
  BurnDelayValue = analogRead(BurnDelayPin);   //0-1023   pwm = 0-255   Burn =  0 to 150ms
  BurnDelayValue = int(BurnDelayValue/BurnDelayDivisor);      //512ms max
- Serial.write(16);  //move cursor...
- Serial.write(84);  //to Line 2
- Serial.print("-BURN TIME:");
- Serial.print(BurnDelayValue);
- Serial.println("ms.  ");
+ //move cursor to line 3 (whatever that means?)
+ lcd_print("-BURN TIME:");
+ lcd_print(String(BurnDelayValue));
+ lcd_println("ms.  ");
  
  //display Character Size so it can be adjusted   
  CharSizeValue = analogRead(CharSizePin);   //0-1023   1024/100 = 10
  CharSizeValue = int(CharSizeValue/CharSizeDivisor);     //
- Serial.print("-CHAR SIZE:");
- Serial.print(CharSizeValue);
- Serial.println("/11 ");
- Serial.print("<ENTER>");
+ lcd_print("-CHAR SIZE:");
+ lcd_print(String(CharSizeValue));
+ lcd_println("/11 ");
+ lcd_print("<ENTER>");
  //WaitForEnterKey();   //cannot use this function because it slows down the refresh rate too much 
  if (keyboard.available())
       {  
@@ -691,27 +681,25 @@ void AdjCharSizes1(){
 
 //more parameter adjustment 
 //**************************
- Serial.write(12);   //clear LCD screen
- Serial.println("ADJUST AS NEEDED:");
+ lcd_clear();   //clear LCD screen
+ lcd_println("ADJUST AS NEEDED:");
  c=0;
  do
  {
  //display Character Spacing so it can be adjusted   
  CharSpaceValue = analogRead(CharSpacePin);   //0-1023   1024/100 = 10
  CharSpaceValue = int(CharSpaceValue/CharSpaceDivisor);     //
- Serial.write(16);  //move cursor...
- Serial.write(84);  //to Line 3
- Serial.print("-CHAR SPACE:");
- Serial.print(CharSpaceValue);
- Serial.println("/11 "); 
+ lcd_print("-CHAR SPACE:");
+ lcd_print(String(CharSpaceValue));
+ lcd_println("/11 "); 
  
  //display Beam Vertical position so it can be adjusted  
  yOffsetValue = analogRead(yOffsetPin);   //0-1023   1024/16 = 64
  yOffsetValue = int(yOffsetValue/yOffsetDivisor);     //need more offset to get beam on pencil, vertically
- Serial.print("-BEAM VERT:");
- Serial.print(yOffsetValue);
- Serial.println("/64 ");
- Serial.print("<ENTER>");
+ lcd_print("-BEAM VERT:");
+ lcd_print(String(yOffsetValue));
+ lcd_println("/64 ");
+ lcd_print("<ENTER>");
  
  //WaitForEnterKey();    //cannot use this function because it slows down the refresh rate too much
  if (keyboard.available())
@@ -816,9 +804,9 @@ void JogLeftDuringBurn(){    //while testing for left limit switch in case there
      {
       digitalWrite(pwmOutPin, LOW);      //LASER OFF, if ON during burning  
       Beep(6); 
-      Serial.write(12);  //clear LCD 
-      Serial.println("ERROR: STANDBY");
-      Serial.print("BURN STOPPED");
+      lcd_clear();  //clear LCD 
+      lcd_println("ERROR: STANDBY");
+      lcd_print("BURN STOPPED");
       y = 6000;   //number of backward steps to take to show burn stopped
       SetRightJogDir();
       for (x=0;x<=y;x++)
@@ -827,20 +815,18 @@ void JogLeftDuringBurn(){    //while testing for left limit switch in case there
         } 
       Beep(3);
       //ERROR message; 
-      Serial.write(12);  //clear LCD 
-      Serial.println("-STAGE MOVED TOO");
-      Serial.println(" FAR LEFT");
-      Serial.println("-SHORTEN MESSAGE OR");
-      Serial.write(16);  //move cursor...
-      Serial.write(124);  //to Line 4
-      Serial.print("<ENTER>");
+      lcd_clear();  //clear LCD 
+      lcd_println("-STAGE MOVED TOO");
+      lcd_println(" FAR LEFT");
+      lcd_println("-SHORTEN MESSAGE OR");
+      lcd_print("<ENTER>");
       WaitForEnterKey();
       Beep(1);
-      Serial.write(12);  //clear LCD 
-      Serial.println("-ADJUST CHAR SIZE");
-      Serial.println(" OR SPACING");
-      Serial.println("-START AGAIN");
-      Serial.print("<ENTER>");
+      lcd_clear();  //clear LCD 
+      lcd_println("-ADJUST CHAR SIZE");
+      lcd_println(" OR SPACING");
+      lcd_println("-START AGAIN");
+      lcd_print("<ENTER>");
       WaitForEnterKey();
       Beep(1);
       Start();
@@ -900,13 +886,11 @@ void ManualJogLeftFunc(){
    if (digitalRead(LeftLimitSw) == 0)
      {
      //ExceedLeftLimitMessageAndBackoff
-      Serial.write(12);  //clear LCD 
-      Serial.println("ERROR:");
-      Serial.println("-STAGE MOVED TOO FAR");
-      Serial.write(16);  //move cursor...
-      Serial.write(104);  //to Line 3
-      Serial.println(" LEFT, REVERSE"); 
-      Serial.println(" DIRECTION"); 
+      lcd_clear();  //clear LCD 
+      lcd_println("ERROR:");
+      lcd_println("-STAGE MOVED TOO FAR");
+      lcd_println(" LEFT, REVERSE"); 
+      lcd_println(" DIRECTION"); 
       y = 800;   //number of backward steps to move stage off limit sw
       SetRightJogDir();
       for (x=0;x<=y;x++)
@@ -932,13 +916,11 @@ void ManualJogRightFunc(){
     if (digitalRead(RightLimitSw) == 0)
       {
      //ExceedRightLimitMessageAndBackoff
-      Serial.write(12);  //clear LCD 
-      Serial.println("ERROR:");
-      Serial.println("-STAGE MOVED TOO FAR");
-      Serial.write(16);  //move cursor...
-      Serial.write(104);  //to Line 3
-      Serial.println(" RIGHT, REVERSE"); 
-      Serial.println(" DIRECTION "); 
+      lcd_clear();  //clear LCD 
+      lcd_println("ERROR:");
+      lcd_println("-STAGE MOVED TOO FAR");
+      lcd_println(" RIGHT, REVERSE"); 
+      lcd_println(" DIRECTION "); 
       y = 800;   //number of backward steps to move stage off limit sw
       SetLeftJogDir();
       for (x=0;x<=y;x++)
@@ -998,14 +980,14 @@ void lcd_init() {
         lcd_screen[i] = '\0';
     }*/
 }
-void lcd_println(const char text[]) {
+void lcd_println(String text) {
     lcd_print(text);
     lcd_lineBreak();
 }
-void lcd_print(const char text[]) {
+void lcd_print(String text) {
     char currentChar;
     for (int i = 0; ; i++) {
-        currentChar = text[i];
+        currentChar = text.charAt(i);
         if (currentChar == '\0') break;
         
         if (currentChar == '\n') {
