@@ -806,7 +806,7 @@ void Home(){
    moveStage(1, false, true);
   }
   while(digitalRead(RightLimitSw) == HIGH); 
-  moveStage(-1000, false, true)
+  moveStage(-1000, false, true);
   Beep(3);
 }
 
@@ -898,10 +898,12 @@ void limitErrorMessage(int limits){
       lcd_clear();
       lcd_println("ERROR:");
       lcd_println("STAGE MOVED TOO FAR");
-      lcd_println(((limits>0)?"LEFT":"RIGHT") + ", REVERSE" );//pick what error message to use
+      String direction = ((limits>0)?"LEFT":"RIGHT");
+      lcd_println(direction + ", REVERSE" );//pick what error message to use
       lcd_println("DIRECTION");
       moveStage(800 * limits, false, true); //since checkLimits returns -1 if right switch tripped, it will move -800 steps (or left 800 steps). If left is tripped, then it will move right!
       Beep(3);
+    }
 }
 
 
