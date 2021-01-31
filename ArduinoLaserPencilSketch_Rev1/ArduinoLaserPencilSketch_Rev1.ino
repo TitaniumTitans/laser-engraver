@@ -832,24 +832,40 @@ void ManualHome(){
 
 /**
  * Invoked upon pressing Jog Left button.
- * TODO: I'd like this function to work a bit differently once we implement microstepping.
  */
-void ManualJogLeftFunc(){
-   moveStage(-1);
-      do
-      {}
+void ManualJogLeftFunc(){ //i rewrote these since i felt that doing it this way will make the movement feel less stuttery.
+  digitalWrite(StepperDirPin, HIGH);
+      do{
+        digitalWrite(StepperPulseOutputPin, HIGH);
+        delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
+        digitalWrite(StepperPulseOutputPin, LOW);
+        delay(50);
+        int limits = checkLimits();
+        if (limits != 0){
+          limitErrorMessage(limits);
+          break;
+        }
+      }
       while(digitalRead(JogLeftButtonPin) == LOW);  //button lockout loop 
   }
 
 /**
  * Invoked upon pressing Jog Right button.
- * TODO: I'd like this function to work a bit differently once we implement microstepping.
  */
 void ManualJogRightFunc(){
-    moveStage(1);
-      do
-      {}
-      while(digitalRead(JogRightButtonPin) == LOW);   //button lockout loop 
+  digitalWrite(StepperDirPin, LOW);
+      do{
+        digitalWrite(StepperPulseOutputPin, HIGH);
+        delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
+        digitalWrite(StepperPulseOutputPin, LOW);
+        delay(50);
+        int limits = checkLimits();
+        if (limits != 0){
+          limitErrorMessage(limits);
+          break;
+        }
+      }
+      while(digitalRead(JogRightButtonPin) == LOW);  //button lockout loop 
 } 
 
 /**
@@ -857,7 +873,6 @@ void ManualJogRightFunc(){
  * requireErrorMessage should be set to false if used during homing.
  * ignoreLimits allows the move command to ignore the state of limit switches. Useful for backing off of a limit switch.
  * 
- * TODO: Implement Microstepping.
  */
 void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = false) {
   (steps > 0)? digitalWrite(StepperDirPin, LOW) : digitalWrite(StepperDirPin, HIGH); //select direction
@@ -875,6 +890,7 @@ void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = f
       break;
     }
   }
+  digitalWrite(StepperEnablePin, HIGH); // disable stepper when we are done.
 }
 /**
  * Checks the value of both limit switches, and returns 1 if the Right switch is tripped, and -1 if the left is tripped.
