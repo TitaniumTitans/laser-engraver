@@ -1045,3 +1045,28 @@ void lcd_scroll()
   lcd_y--;
   lcd.setCursor(lcd_x, lcd_y);
 }
+/**
+ * @brief Deletes (replaces with '\0') the character to the left of the cursor, and moves the cursor leftwards 1 column.
+ * 
+ */
+void lcd_backsp() {
+  if (lcd_x == 0) {
+    return;
+  }
+  lcd_x--;
+  lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height][lcd_x] = '\0';
+  
+  lcd.setCursor(lcd_x, lcd_y);
+  lcd.write(' ');
+  lcd.setCursor(lcd_x, lcd_y);
+}
+/**
+ * @brief Returns a copy of the row where the cursor is at.
+ * 
+ */
+String lcd_getLine() {
+  //char[lcd_width + 1] copy;
+  //strcpy(copy, lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height]);
+  // TODO: I didn't find whether the String constructor actually copies the string or uses a reference!
+  return String(lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height]);
+}
