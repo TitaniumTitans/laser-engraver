@@ -61,6 +61,7 @@ int CharSizeDivisor = 90;                //1023/90 = 11 max
 int CharSpaceDivisor = 90;               //1023/90 = 11 max
 int yOffsetDivisor = 16;                 //1023/16 = 64  max Fine vertical offset
 int TimeForStageToMoveOneCharacter = 1500;   //set at 1.5 seconds
+int HomeBackOffSteps = 1000;             // number of steps to move off of the limit switch during homing.
 
 //Declare General Variables
 long x;
@@ -349,8 +350,8 @@ lcd_print("3.CHARACTER ADJUST");
 
 
 Loop1:
-if ((digitalRead(JogLeftButtonPin)) == 0) ManualJogLeftFunc();
-if ((digitalRead(JogRightButtonPin)) == 0) ManualJogRightFunc();
+if ((digitalRead(JogLeftButtonPin)) == 0) ManualJogFunc(true);
+if ((digitalRead(JogRightButtonPin)) == 0) ManualJogFunc(false);
 if ((digitalRead(HomeButtonPin)) == 0) ManualHome();
 
 if (keyboard.available()){
@@ -782,23 +783,39 @@ void WaitForEnterKey(){
 //********************************************************************************************************************
 
 /**
- * Moves the stage enough space for the next letter to be engraved.
+ * Moves the stage according to directional input and the number of steps. Steps should be positive for right movement, negative for left movement.
+ * requireErrorMessage should be set to false if used during homing.
+ * ignoreLimits allows the move command to ignore the state of limit switches. Useful for backing off of a limit switch.
  * 
- * TODO: Factor this function out, it is *almost* redundant.
  */
-void MoveStageLeftOneLetterDuringBurn()    //jog one space worth of jogs, approx 1100
-{
-  CharSpaceValue = ((analogRead(CharSpacePin)) * 2);   //0 to 1023 
+void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = false) {
+  (steps > 0)? digitalWrite(StepperDirPin, LOW) : digitalWrite(StepperDirPin, HIGH); //select direction
+  digitalWrite(StepperEnablePin, LOW); // enable stepper controller
+  for (int i = 0; i <= steps; i++){
+    digitalWrite(StepperPulseOutputPin, HIGH);
+    delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
+    digitalWrite(StepperPulseOutputPin, LOW);
+    delay(50);
+    int limits = checkLimits();
+    if (limits != 0 && ignoreLimits == false){
+      if (requireErrorMessage){
+        limitErrorMessage(limits);
+      }
+      break;
+    }
+  }
+  digitalWrite(StepperEnablePin, HIGH); // disable stepper when we are done.
+}
 
-  moveStage(-1 * CharSpaceValue);
-  delay(100);
- }
-
+void MoveStageLeftOneLetterDuringBurn() { //for some darn reason i can't get rid of this. i have to force the compiler to read moveStage by moving the first time it is called to below its definition. this makes absolutely no sense since this function's def is below the first time it is called as well.
+  CharSpaceValue = ((analogRead(CharSpacePin)) * 2);   //0 to 1023
+  moveStage(-1 * CharSpaceValue); //move left one letter during burn
+  delay(100);      //the number of steps is adjusted earlier by the Char Space knob
+}
 
 /**
- * IMPORTANT: Does not function like a normal CNC homing function.
  * First, this function moves the stage all the way to the right.
- * Then, the function moves the stage 1000 steps to the left.
+ * Then, the function moves the stage an arbitrary value of steps to the left.
  */
 void Home(){                 
   do
@@ -806,20 +823,20 @@ void Home(){
    moveStage(1, false, true);
   }
   while(digitalRead(RightLimitSw) == HIGH); 
-  moveStage(-1000, false, true);
+  moveStage(-1 * HomeBackOffSteps, false, true);
   Beep(3);
 }
 
 /**
- * Invoked upon pressing Home button. Moves the stage all the way to the right, then moves 1000 steps backwards.
+ * Invoked upon pressing Home button. Moves the stage all the way to the right, then moves an arbitrary amount of steps backwards.
  */
 void ManualHome(){
   do
     {
-    moveStage(1, false, true);
-    if (digitalRead(RightLimitSw) == LOW)
+    moveStage(1, false, true); //move stage right
+    if (checkLimits() != 0) //check limit switch. if it doesnt hit then keep looping.
       {
-      moveStage(-1000, false, true);
+      moveStage(-1 * HomeBackOffSteps, false, true); //1000 is arbitrary.
       Beep(3);
       do
       {}
@@ -853,44 +870,6 @@ void ManualJogFunc(bool left) { // I rewrote these since i felt that doing it th
   while(digitalRead(buttonPin) == LOW);  //button lockout loop 
 }
 
-/**
- * Invoked upon pressing Jog Left button.
- */
-void ManualJogLeftFunc() {
-  ManualJogFunc(true);
-}
-
-/**
- * Invoked upon pressing Jog Right button.
- */
-void ManualJogRightFunc() {
-  ManualJogFunc(false);
-}
-
-/**
- * Moves the stage according to directional input and the number of steps. Steps should be positive for right movement, negative for left movement.
- * requireErrorMessage should be set to false if used during homing.
- * ignoreLimits allows the move command to ignore the state of limit switches. Useful for backing off of a limit switch.
- * 
- */
-void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = false) {
-  (steps > 0)? digitalWrite(StepperDirPin, LOW) : digitalWrite(StepperDirPin, HIGH); //select direction
-  digitalWrite(StepperEnablePin, LOW); // enable stepper controller
-  for (int i = 0; i <= steps; i++){
-    digitalWrite(StepperPulseOutputPin, HIGH);
-    delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
-    digitalWrite(StepperPulseOutputPin, LOW);
-    delay(50);
-    int limits = checkLimits();
-    if (limits != 0 && ignoreLimits == false){
-      if (requireErrorMessage){
-        limitErrorMessage(limits);
-      }
-      break;
-    }
-  }
-  digitalWrite(StepperEnablePin, HIGH); // disable stepper when we are done.
-}
 /**
  * Checks the value of both limit switches, and returns 1 if the Right switch is tripped, and -1 if the left is tripped.
  */
