@@ -794,10 +794,11 @@ void ReadPots()
 //********************************************************************************************************************
 
 /**
- * Moves the stage according to directional input and the number of steps. Steps should be positive for right movement, negative for left movement.
- * requireErrorMessage should be set to false if used during homing.
- * ignoreLimits allows the move command to ignore the state of limit switches. Useful for backing off of a limit switch.
+ * @brief Moves the stage according to directional input and number of steps.
  * 
+ * @param steps Number of steps. Positive for right movement, negative for left movement.
+ * @param requireErrorMessage Normally true, set to false if tripping a switch shouldn't send a message (useful during homing)
+ * @param ignoreLimits Normally false, set to true if movement should ignore limit switches (useful for backing off a switch)
  */
 void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = false)
 {
@@ -837,7 +838,8 @@ void Home()
 }
 
 /**
- * Invoked upon pressing Home button. Moves the stage all the way to the right, then moves an arbitrary amount of steps backwards.
+ * @brief Invoked when home button is pressed.
+ * Moves stage all the way to the right, then back left an arbitrary number of steps.
  */
 void ManualHome()
 {
@@ -855,7 +857,11 @@ void ManualHome()
     }
   } while (digitalRead(RightLimitSw) == HIGH);
 }
-
+/**
+ * @brief Invoked when a manual jog function is called.
+ * Moves the stage continuously either left or right. Checks for limit switches.
+ * @param left Set this to true for left movement, false for right movement.
+ */
 void ManualJogFunc(bool left)
 { // I rewrote these since i felt that doing it this way will make the movement feel less stuttery.
   int buttonPin;
@@ -885,7 +891,9 @@ void ManualJogFunc(bool left)
 }
 
 /**
- * Checks the value of both limit switches, and returns 1 if the Right switch is tripped, and -1 if the left is tripped.
+ * @brief Checks values of limit switches.
+ * 
+ * @return int Returns -1 if right switch is tripped, 1 if left and 0 if normal.
  */
 int checkLimits()
 {
@@ -901,7 +909,9 @@ int checkLimits()
 }
 
 /**
- * Because the intended behavior of the limit switches changes depending on the function used (i.e. with homing not needing error messages), this needs to be optional.
+ * @brief Displays an error message if the stage is moved too far.
+ * 
+ * @param limits Input the return value from checkLimits()
  */
 void limitErrorMessage(int limits)
 {
@@ -930,7 +940,10 @@ uint8_t lcd_x = 0;
 
 char lcd_screen[lcd_height][lcd_width + 1]; // (lcd_width+1, for the \0 at the line end)
 uint8_t lcd_screen_wrap = 0;
-
+/**
+ * @brief Initializes the LCD. Should be called during startup.
+ * 
+ */
 void lcd_init()
 {
   lcd.init();
@@ -939,11 +952,21 @@ void lcd_init()
         lcd_screen[i] = '\0';
     }*/
 }
+/**
+ * @brief Prints a message to the LCD, then moves cursor to next line.
+ * 
+ * @param text The message to be printed. (String is used for ease of conversion)
+ */
 void lcd_println(String text)
 {
   lcd_print(text);
   lcd_lineBreak();
 }
+/**
+ * @brief Prints a message to the LCD.
+ * 
+ * @param text The message to be printed. (String is used for ease of conversion)
+ */
 void lcd_print(String text)
 {
   char currentChar;
@@ -972,12 +995,20 @@ void lcd_print(String text)
     }
   }
 }
+/**
+ * @brief Clears the LCD and resets cursor.
+ * 
+ */
 void lcd_clear()
 {
   lcd.clear();
   lcd_x = 0;
   lcd_y = 0;
 }
+/**
+ * @brief Moves to next LCD line. Resets cursor to beginning of line.
+ * 
+ */
 void lcd_lineBreak()
 {
   lcd_x = 0;
@@ -989,7 +1020,10 @@ void lcd_lineBreak()
     lcd_scroll();
   }
 }
-// Scrolls the display down one line
+/**
+ * @brief Scrolls the LCD down one line.
+ * 
+ */
 void lcd_scroll()
 {
   lcd.clear();
