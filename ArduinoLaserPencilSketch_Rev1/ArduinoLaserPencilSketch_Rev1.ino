@@ -145,6 +145,8 @@ const int IRQpin =  2; //CLK on EE-1003
 //if the #include PS2Keyboard library is used, pin 2 must be used for the PS2 keyboard interrupt
 char c;                  //or it will not work for all PS-2 keyboards.  Pin 2 = interrupt 0.
 
+void moveStage(int, bool = true, bool = false); //damn you cpp
+
 //CHARACTER ARRAY 
 //Array reads DOWN and ACROSS, CharacterArray[DOWN][ACROSS], [96]DOWN [46]ACROSS, CharacterArray[ASCII letter to be burned][x,y burn dot coordinates]
 //Each row contains the XY dots that form the letters. Each letter can have up to 46/2 = 23 dots. Although there are 5 x 7 = 35 dots that can be 
@@ -601,7 +603,11 @@ goto TableLoop;
 BurnOneDone:  
 i = 0;
 
-MoveStageLeftOneLetterDuringBurn();       //the number of steps is adjusted earlier by the Char Space knob
+CharSpaceValue = ((analogRead(CharSpacePin)) * 2);   //0 to 1023
+moveStage(-1 * CharSpaceValue); //move left one letter during burn
+delay(100);      //the number of steps is adjusted earlier by the Char Space knob
+
+//MoveStageLeftOneLetterDuringBurn();       //the number of steps is adjusted earlier by the Char Space knob
 delay(TimeForStageToMoveOneCharacter);    //Allow time for stage to move over one letter. Increase this 
                                           //delay if the characters are much bigger. Typ for pencil: 1.5 sec
                                           
@@ -805,12 +811,6 @@ void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = f
     }
   }
   digitalWrite(StepperEnablePin, HIGH); // disable stepper when we are done.
-}
-
-void MoveStageLeftOneLetterDuringBurn() { //for some darn reason i can't get rid of this. i have to force the compiler to read moveStage by moving the first time it is called to below its definition. this makes absolutely no sense since this function's def is below the first time it is called as well.
-  CharSpaceValue = ((analogRead(CharSpacePin)) * 2);   //0 to 1023
-  moveStage(-1 * CharSpaceValue); //move left one letter during burn
-  delay(100);      //the number of steps is adjusted earlier by the Char Space knob
 }
 
 /**
