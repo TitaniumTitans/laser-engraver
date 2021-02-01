@@ -830,43 +830,42 @@ void ManualHome(){
   while(digitalRead(RightLimitSw) == HIGH);
 }
 
+void ManualJogFunc(bool left) { // I rewrote these since i felt that doing it this way will make the movement feel less stuttery.
+  int buttonPin;
+  if (left) {
+    buttonPin = JogLeftButtonPin;
+    digitalWrite(StepperDirPin, HIGH);
+  } else {
+    buttonPin = JogRightButtonPin;
+    digitalWrite(StepperDirPin, LOW);
+  }
+  do {
+    digitalWrite(StepperPulseOutputPin, HIGH);
+    delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
+    digitalWrite(StepperPulseOutputPin, LOW);
+    delay(50);
+    int limits = checkLimits();
+    if (limits != 0){
+      limitErrorMessage(limits);
+      break;
+    }
+  }
+  while(digitalRead(buttonPin) == LOW);  //button lockout loop 
+}
+
 /**
  * Invoked upon pressing Jog Left button.
  */
-void ManualJogLeftFunc(){ //i rewrote these since i felt that doing it this way will make the movement feel less stuttery.
-  digitalWrite(StepperDirPin, HIGH);
-      do{
-        digitalWrite(StepperPulseOutputPin, HIGH);
-        delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
-        digitalWrite(StepperPulseOutputPin, LOW);
-        delay(50);
-        int limits = checkLimits();
-        if (limits != 0){
-          limitErrorMessage(limits);
-          break;
-        }
-      }
-      while(digitalRead(JogLeftButtonPin) == LOW);  //button lockout loop 
-  }
+void ManualJogLeftFunc() {
+  ManualJogFunc(true);
+}
 
 /**
  * Invoked upon pressing Jog Right button.
  */
-void ManualJogRightFunc(){
-  digitalWrite(StepperDirPin, LOW);
-      do{
-        digitalWrite(StepperPulseOutputPin, HIGH);
-        delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
-        digitalWrite(StepperPulseOutputPin, LOW);
-        delay(50);
-        int limits = checkLimits();
-        if (limits != 0){
-          limitErrorMessage(limits);
-          break;
-        }
-      }
-      while(digitalRead(JogRightButtonPin) == LOW);  //button lockout loop 
-} 
+void ManualJogRightFunc() {
+  ManualJogFunc(false);
+}
 
 /**
  * Moves the stage according to directional input and the number of steps. Steps should be positive for right movement, negative for left movement.
