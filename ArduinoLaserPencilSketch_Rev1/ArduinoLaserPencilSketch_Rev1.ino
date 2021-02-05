@@ -44,29 +44,54 @@ Available interrupt pins: 2,3,21,20,19,18 (int0,1,2,3,4,5)
 #include <PS2Keyboard.h> //Keyboard
 #include <SPI.h>         //DACs
 #include <LiquidCrystal_I2C.h>
-//#include "MegunoLink.h"          //For testing only
 PS2Keyboard keyboard;
 
 // LCD over I²C screen:
-const uint8_t lcd_width = 20;
-const uint8_t lcd_height = 4;
+#define lcd_width 20
+#define lcd_height 4
 LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x27 for a 20 chars and 4 line display
 
+//Declare Pins
+#define X_SEL 6          //EE-1003 X-SEL
+#define Y_SEL 7          //EE-1003 Y-SEL
+#define MISO 53          //EE-1003 MISO
+#define BRN_PIN A8       //BRN
+#define CSP_PIN A9       //CSP
+#define CHR_PIN A11      //CHR
+#define YOFF_PIN A12     //YOFF
+#define LASER_EN_PIN 23  //LASER EN
+#define STP_BRN_PIN 38   //STP BRN
+#define BURN_PIN 40      //BURN
+#define STG_LEFT_PIN 34  //STG LEFT
+#define STG_RGHT_PIN 32  //STG RIGHT
+#define STG_HOME_PIN 36  //STG HOME
+#define DIR_PIN 13       //DIR on EE-1003
+#define EN_PIN 12        //EN on EE-1003
+#define STEP_PIN 11      //STEP on EE-1003
+#define BEEP_PIN 27      //BEEP on EE-1003
+#define LIM1_RGHT_PIN 19 //LIM1 on EE-1003
+#define LIM2_LEFT_PIN 18 //LIM2 on EE-1003
+#define MS1_PIN 10       //MS1 on EE-1003
+#define MS2_PIN 9        //MS2 on EE-1003
+#define SAFETY_PIN 48    //Unused.
+#define KB_DATA_PIN 8    //DATA on EE-1003
+#define KB_CLK_PIN 2     //CLK on EE-1003
+
 //Declare User Values
-int KeyboardInterStrokeDelay = 200;        //milliseconds
-int BeamGrossVerticalOffset = 0;           //out of 1023   Coarse vertical offset
-int BeamGrossHorizOffset = 0;              //out of 1023   Coarse horiz offset
-int BurnDelayDivisor = 2;                  //1023/2 = 512ms max
-int CharSizeDivisor = 90;                  //1023/90 = 11 max
-int CharSpaceDivisor = 90;                 //1023/90 = 11 max
-int yOffsetDivisor = 16;                   //1023/16 = 64  max Fine vertical offset
-int TimeForStageToMoveOneCharacter = 1500; //set at 1.5 seconds
-int HomeBackOffSteps = 1000;               // number of steps to move off of the limit switch during homing.
+#define KeyboardInterStrokeDelay 200        //milliseconds
+#define BeamGrossVerticalOffset 0           //out of 1023   Coarse vertical offset
+#define BeamGrossHorizOffset 0              //out of 1023   Coarse horiz offset
+#define BurnDelayDivisor 2                  //1023/2 = 512ms max
+#define CharSizeDivisor 90                  //1023/90 = 11 max
+#define CharSpaceDivisor 90                 //1023/90 = 11 max
+#define yOffsetDivisor 16                   //1023/16 = 64  max Fine vertical offset
+#define TimeForStageToMoveOneCharacter 1500 //set at 1.5 seconds
+#define HomeBackOffSteps 1000               // number of steps to move off of the limit switch during homing.
 
 //Declare General Variables
 long x;
 int y;
-int z;
+//int z; (unused)
 int i = 0;
 byte ii;
 double j;
@@ -77,7 +102,7 @@ int CharSpaceValue;
 int yOffsetValue;
 int BurnDelayValue = 0;
 int pwmValue; //sent to TTL pin of laser controller
-int Kerning;
+//int Kerning; unused
 byte Letter;
 byte len;
 byte NumberOfLettersToDraw;
@@ -86,59 +111,18 @@ int VoltageToDAC;
 byte HighByte; //for serial DAC
 byte LowByte;  //for serial DAC
 
-//Declare Variables for X-Axis Stepper
-int NumberofSteps;
-int StepCntRst;
-long StepperCounter = 0;
-int StepCounter;
-volatile byte TriggerJog = 0;
-char FileName[40];
-byte time;
-char time1;
-
-//Declare Pins
-const int XDACSelectPin = 6; //X-SEL
-const int YDACSelectPin = 7; //Y-SEL
-const int DACLatch = 53;     //EE-1003 MISO
-
-//trimpots
-const byte BurnDelayPin = A8; //BRN
-const byte CharSpacePin = A9; //CSP
-const byte CharSizePin = A11; //CHR
-const byte yOffsetPin = A12;  //YOFF
-
-const byte pwmOutPin = 23; //LASER EN
-
-//buttons
-const byte StopButton = 38;        //STP BRN
-const byte BurnButton = 40;        //BURN
-const byte JogLeftButtonPin = 34;  //STG LEFT
-const byte JogRightButtonPin = 32; //STG RIGHT
-const byte HomeButtonPin = 36;     //STG HOME
-
-//stepper
-const byte StepperDirPin = 13;         //DIR on EE-1003
-const byte StepperEnablePin = 12;      //EN on EE-1003
-const byte StepperPulseOutputPin = 11; //STEP on EE-1003
-
-//limits and beeper
-const byte BeeperPin = 27;    //BEEP on EE-1003
-const byte RightLimitSw = 19; //LIM1 on EE-1003
-const byte LeftLimitSw = 18;  //LIM2 on EE-1003
-
-const byte stepperMS1 = 10; //we are removing microstepping correct?
-const byte stepperMS2 = 9;
-
-const byte SafetySwitchPin = 48; //Unused.
-//const byte ExhaustFanPin = 49;
+//Declare Variables for X-Axis Stepper (from Sam: none of these appear to be used.)
+//int NumberofSteps;
+//int StepCntRst;
+//long StepperCounter = 0;
+//int StepCounter;
+//volatile byte TriggerJog = 0;
+//char FileName[40]; //unused? confirm?
+//byte time; //unused?
+//char time1; //unused?
 
 //Data out pin = 51, MOSI Pin,    SPI routine specifies it
 //Clock out pin = 52, SCK Pin,    SPI routine specifies it
-
-//keyboard stuff
-//***********************
-const int DataPin = 8; //DATA on EE-1003
-const int IRQpin = 2;  //CLK on EE-1003
 
 //if the #include PS2Keyboard library is used, pin 2 must be used for the PS2 keyboard interrupt
 char c; //or it will not work for all PS-2 keyboards.  Pin 2 = interrupt 0.
@@ -266,32 +250,31 @@ byte MessageTable[80] = {0}; //declare message table
 void setup()
 {
 
-  pinMode(XDACSelectPin, OUTPUT);
-  pinMode(YDACSelectPin, OUTPUT);
-  pinMode(DACLatch, OUTPUT);
-  delay(1);
-  digitalWrite(XDACSelectPin, HIGH); //neg CS for SPI writing in data
-  digitalWrite(YDACSelectPin, HIGH); //neg CS for SPI writing in data
-  digitalWrite(DACLatch, HIGH);      //neg pulse to latch data to DAC outputs
-  delay(10);
-  pinMode(CharSizePin, INPUT);
-  pinMode(yOffsetPin, INPUT);
-  pinMode(BurnDelayPin, INPUT);
-  pinMode(CharSpacePin, INPUT);
-  pinMode(StopButton, INPUT);
-  pinMode(BurnButton, INPUT);
-  pinMode(RightLimitSw, INPUT);
-  pinMode(LeftLimitSw, INPUT);
-  pinMode(pwmOutPin, OUTPUT);
-  pinMode(JogRightButtonPin, INPUT);
-  pinMode(JogLeftButtonPin, INPUT);
-  pinMode(BeeperPin, OUTPUT);
-  pinMode(HomeButtonPin, INPUT);
-  pinMode(StepperDirPin, OUTPUT);
-  pinMode(StepperEnablePin, OUTPUT);
-  pinMode(StepperPulseOutputPin, OUTPUT);
-  pinMode(SafetySwitchPin, INPUT);
-  //pinMode(ExhaustFanPin, OUTPUT);
+  pinMode(X_SEL, OUTPUT);
+  pinMode(Y_SEL, OUTPUT);
+  pinMode(MISO, OUTPUT);
+  pinMode(CHR_PIN, INPUT);
+  pinMode(YOFF_PIN, INPUT);
+  pinMode(BRN_PIN, INPUT);
+  pinMode(CSP_PIN, INPUT);
+  pinMode(STP_BRN_PIN, INPUT);
+  pinMode(BURN_PIN, INPUT);
+  pinMode(LIM1_RGHT_PIN, INPUT);
+  pinMode(LIM2_LEFT_PIN, INPUT);
+  pinMode(LASER_EN_PIN, OUTPUT);
+  pinMode(STG_RGHT_PIN, INPUT);
+  pinMode(STG_LEFT_PIN, INPUT);
+  pinMode(BEEP_PIN, OUTPUT);
+  pinMode(STG_HOME_PIN, INPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(EN_PIN, OUTPUT);
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(SAFETY_PIN, INPUT);
+
+  digitalWrite(X_SEL, HIGH); //neg CS for SPI writing in data
+  digitalWrite(Y_SEL, HIGH); //neg CS for SPI writing in data
+  delay(5);
+  digitalWrite(MISO, HIGH);  //neg pulse to latch data to DAC outputs
 
   //Interrupt calls
   //****************
@@ -301,13 +284,12 @@ void setup()
 
   SPI.setClockDivider(SPI_CLOCK_DIV128);
   SPI.begin();
-  SPI.setClockDivider(SPI_CLOCK_DIV128);
+  SPI.setClockDivider(SPI_CLOCK_DIV128); //does this need to be here twice
 
-  //keyboard and LCD stuff
-  keyboard.begin(DataPin, IRQpin);
+  keyboard.begin(KB_DATA_PIN, KB_CLK_PIN);
 
   delay(100);
-  analogWrite(pwmOutPin, 0); //pre-shuts laser off, double safety
+  analogWrite(LASER_EN_PIN, 0); //pre-shuts laser off, double safety
 
   lcd_init();
 
@@ -335,12 +317,6 @@ void loop()
 
 void Start()
 {
-
-  /*Serial.write(12);         //clear LCD screen  
-Serial.println("START:TYPE 1,2 OR 3");
-Serial.println("1.NEW MESSAGE");  
-Serial.println("2.REPEAT BURN");
-Serial.println("3.CHARACTER ADJUST"); */
   lcd_clear();
   lcd_println("START:TYPE 1,2 OR 3");
   lcd_println("1.NEW MESSAGE");
@@ -348,11 +324,11 @@ Serial.println("3.CHARACTER ADJUST"); */
   lcd_print("3.CHARACTER ADJUST");
 
 Loop1:
-  if ((digitalRead(JogLeftButtonPin)) == 0)
+  if ((digitalRead(STG_LEFT_PIN)) == 0)
     ManualJogFunc(true);
-  if ((digitalRead(JogRightButtonPin)) == 0)
+  if ((digitalRead(STG_RGHT_PIN)) == 0)
     ManualJogFunc(false);
-  if ((digitalRead(HomeButtonPin)) == 0)
+  if ((digitalRead(STG_HOME_PIN)) == 0)
     ManualHome();
 
   if (keyboard.available())
@@ -408,9 +384,7 @@ void MessageFormatting()
   lcd_clear();
   lcd_println("-USE BACKSPACE FOR");
   lcd_println(" CORRECTIONS");
-  lcd_println("-DO <ENTER> NOW TO"); // This originally had "Serial.print(". I don't know what the next line two lines were for:
-  /*Serial.write(16);
- Serial.write(124);   //move cursor to line 4*/
+  lcd_println("-DO <ENTER> NOW TO"); 
   lcd_print(" OPEN TYPING WINDOW");
   WaitForEnterKey();
   Beep(1);
@@ -487,7 +461,7 @@ void BurnMessageSequence()
   lcd_print(" HOLD STOP TO QUIT");
   do
   {
-  } while (digitalRead(BurnButton) == 1);
+  } while (digitalRead(BURN_PIN) == 1);
   Beep(1);
   lcd_clear();
 
@@ -548,11 +522,11 @@ void BurnOneLetter()
   int i = 0;
 
 TableLoop:
-  if (digitalRead(StopButton) == LOW)
+  if (digitalRead(STP_BRN_PIN) == LOW)
   { //check for Stop button
     Beep(3);
-    digitalWrite(pwmOutPin, LOW); //turn laser off, if not off
-    lcd_clear();                  //clear screen
+    digitalWrite(LASER_EN_PIN, LOW); //turn laser off, if not off
+    lcd_clear();                     //clear screen
     lcd_println("BURN HALTED:");
     lcd_print("<ENTER>");
     WaitForEnterKey();
@@ -569,38 +543,38 @@ TableLoop:
     //write data to DACs
     //***************************************************
     //SERIAL  X DAC
-    digitalWrite(XDACSelectPin, LOW);                                          //X chip select
+    digitalWrite(X_SEL, LOW);                                                  //X chip select
     VoltageToDAC = (((xArrayVal * CharSizeValue) * 6) + BeamGrossHorizOffset); //0 to 1023(measured=2.03mv/count)
     ConvertToTwoBytes();
     SPI.transfer(HighByte);
     SPI.transfer(LowByte);
-    digitalWrite(XDACSelectPin, HIGH);
+    digitalWrite(X_SEL, HIGH);
 
     //SERIAL Y DAC
     //You can dynamically adjust vertical position of char on pencil, each time a new char is burned
-    yOffsetValue = analogRead(yOffsetPin);             //0-1023   1024/16 = 64
+    yOffsetValue = analogRead(YOFF_PIN);               //0-1023   1024/16 = 64
     yOffsetValue = int(yOffsetValue / yOffsetDivisor); //need more offset to get beam on pencil, vertically
 
-    digitalWrite(YDACSelectPin, LOW); //Y chip select
+    digitalWrite(Y_SEL, LOW); //Y chip select
     VoltageToDAC = ((((yArrayVal * CharSizeValue) + yOffsetValue) * 6) + BeamGrossVerticalOffset);
     ConvertToTwoBytes();
     SPI.transfer(HighByte);
     SPI.transfer(LowByte);
-    digitalWrite(YDACSelectPin, HIGH);
+    digitalWrite(Y_SEL, HIGH);
 
     //Latch X & Y values to DAC outputs
-    digitalWrite(DACLatch, LOW); //10us negative pulse to chips to latch in write
+    digitalWrite(MISO, LOW); //10us negative pulse to chips to latch in write
     delayMicroseconds(10);
-    digitalWrite(DACLatch, HIGH);
+    digitalWrite(MISO, HIGH);
 
     if (LetterIndex == 0)
       goto NoBurn; //skip one space
 
     //BURNING ONE DOT ON THE PENCIL
     //**************************************************
-    digitalWrite(pwmOutPin, HIGH); //LASER ON
-    delay(BurnDelayValue);         //typ: 100-500 ms.
-    digitalWrite(pwmOutPin, LOW);  //LASER OFF
+    digitalWrite(LASER_EN_PIN, HIGH); //LASER ON
+    delay(BurnDelayValue);            //typ: 100-500 ms.
+    digitalWrite(LASER_EN_PIN, LOW);  //LASER OFF
     //**************************************************
 
   NoBurn:
@@ -610,9 +584,9 @@ TableLoop:
   BurnOneDone:
     i = 0;
 
-    CharSpaceValue = ((analogRead(CharSpacePin)) * 2); //0 to 1023
-    moveStage(-1 * CharSpaceValue);                    //move left one letter during burn
-    delay(100);                                        //the number of steps is adjusted earlier by the Char Space knob
+    CharSpaceValue = ((analogRead(CSP_PIN)) * 2); //0 to 1023
+    moveStage(-1 * CharSpaceValue);               //move left one letter during burn
+    delay(100);                                   //the number of steps is adjusted earlier by the Char Space knob
 
     //MoveStageLeftOneLetterDuringBurn();       //the number of steps is adjusted earlier by the Char Space knob
     delay(TimeForStageToMoveOneCharacter); //Allow time for stage to move over one letter. Increase this
@@ -670,7 +644,7 @@ void AdjCharSizes()
   do
   {
     //display Burn Time so it can be adjusted
-    BurnDelayValue = analogRead(BurnDelayPin);               //0-1023   pwm = 0-255   Burn =  0 to 150ms
+    BurnDelayValue = analogRead(BRN_PIN);                    //0-1023   pwm = 0-255   Burn =  0 to 150ms
     BurnDelayValue = int(BurnDelayValue / BurnDelayDivisor); //512ms max
     //move cursor to line 3 (whatever that means?)
     lcd_print("-BURN TIME:");
@@ -678,7 +652,7 @@ void AdjCharSizes()
     lcd_println("ms.  ");
 
     //display Character Size so it can be adjusted
-    CharSizeValue = analogRead(CharSizePin);              //0-1023   1024/100 = 10
+    CharSizeValue = analogRead(CHR_PIN);                  //0-1023   1024/100 = 10
     CharSizeValue = int(CharSizeValue / CharSizeDivisor); //
     lcd_print("-CHAR SIZE:");
     lcd_print(String(CharSizeValue) + "/11");
@@ -700,13 +674,13 @@ void AdjCharSizes()
   do
   {
     //display Character Spacing so it can be adjusted
-    CharSpaceValue = analogRead(CharSpacePin);               //0-1023   1024/100 = 10
+    CharSpaceValue = analogRead(CSP_PIN);                    //0-1023   1024/100 = 10
     CharSpaceValue = int(CharSpaceValue / CharSpaceDivisor); //
     lcd_print("-CHAR SPACE:");
     lcd_print(String(CharSpaceValue) + "/11");
 
     //display Beam Vertical position so it can be adjusted
-    yOffsetValue = analogRead(yOffsetPin);             //0-1023   1024/16 = 64
+    yOffsetValue = analogRead(YOFF_PIN);               //0-1023   1024/16 = 64
     yOffsetValue = int(yOffsetValue / yOffsetDivisor); //need more offset to get beam on pencil, vertically
     lcd_print("-BEAM VERT:");
     lcd_print(String(yOffsetValue) + "/64");
@@ -728,20 +702,20 @@ void ResetDACs()
   VoltageToDAC = 0;
   ConvertToTwoBytes();
 
-  digitalWrite(XDACSelectPin, LOW); //X chip select
+  digitalWrite(X_SEL, LOW); //X chip select
   SPI.transfer(HighByte);
   SPI.transfer(LowByte);
-  digitalWrite(XDACSelectPin, HIGH);
+  digitalWrite(X_SEL, HIGH);
 
-  digitalWrite(YDACSelectPin, LOW); //Y chip select
+  digitalWrite(Y_SEL, LOW); //Y chip select
   SPI.transfer(HighByte);
   SPI.transfer(LowByte);
-  digitalWrite(YDACSelectPin, HIGH);
+  digitalWrite(Y_SEL, HIGH);
 
   //Latch X & Y values to DAC outputs
-  digitalWrite(DACLatch, LOW); //10us negative pulse to chips to latch in write
+  digitalWrite(MISO, LOW); //10us negative pulse to chips to latch in write
   delayMicroseconds(10);
-  digitalWrite(DACLatch, HIGH);
+  digitalWrite(MISO, HIGH);
 }
 
 //********************************************************
@@ -749,9 +723,9 @@ void Beep(int y)
 {
   for (x = 1; x <= y; x++)
   {
-    digitalWrite(BeeperPin, HIGH);
+    digitalWrite(BEEP_PIN, HIGH);
     delay(100);
-    digitalWrite(BeeperPin, LOW);
+    digitalWrite(BEEP_PIN, LOW);
     delay(100);
   }
 }
@@ -775,16 +749,16 @@ void WaitForEnterKey()
 void ReadPots()
 {
 
-  BurnDelayValue = analogRead(BurnDelayPin);               //0-1023
+  BurnDelayValue = analogRead(BRN_PIN);                    //0-1023
   BurnDelayValue = int(BurnDelayValue / BurnDelayDivisor); //typ 1023/2 = typ 512ms max burn time
 
-  CharSizeValue = analogRead(CharSizePin);              //typ 1023/90 = 11
+  CharSizeValue = analogRead(CHR_PIN);                  //typ 1023/90 = 11
   CharSizeValue = int(CharSizeValue / CharSizeDivisor); //
 
-  CharSpaceValue = analogRead(CharSpacePin); //typ 1023/90 = 11
+  CharSpaceValue = analogRead(CSP_PIN); //typ 1023/90 = 11
   CharSpaceValue = int(CharSpaceValue / CharSpaceDivisor);
 
-  yOffsetValue = analogRead(yOffsetPin);             //typ 1023/16 = 64
+  yOffsetValue = analogRead(YOFF_PIN);               //typ 1023/16 = 64
   yOffsetValue = int(yOffsetValue / yOffsetDivisor); //may need more offset to get beam on pencil, vertically
                                                      //refer to Gross Vert Offset at start of program
 }
@@ -802,13 +776,13 @@ void ReadPots()
  */
 void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = false)
 {
-  (steps > 0) ? digitalWrite(StepperDirPin, LOW) : digitalWrite(StepperDirPin, HIGH); //select direction
-  digitalWrite(StepperEnablePin, LOW);                                                // enable stepper controller
+  (steps > 0) ? digitalWrite(DIR_PIN, LOW) : digitalWrite(DIR_PIN, HIGH); //select direction
+  digitalWrite(EN_PIN, LOW);                                              // enable stepper controller
   for (int i = 0; i <= steps; i++)
   {
-    digitalWrite(StepperPulseOutputPin, HIGH);
+    digitalWrite(STEP_PIN, HIGH);
     delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
-    digitalWrite(StepperPulseOutputPin, LOW);
+    digitalWrite(STEP_PIN, LOW);
     delay(50);
     int limits = checkLimits();
     if (limits != 0 && ignoreLimits == false)
@@ -820,7 +794,7 @@ void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = f
       break;
     }
   }
-  digitalWrite(StepperEnablePin, HIGH); // disable stepper when we are done.
+  digitalWrite(EN_PIN, HIGH); // disable stepper when we are done.
 }
 
 /**
@@ -832,7 +806,7 @@ void Home()
   do
   {
     moveStage(1, false, true);
-  } while (digitalRead(RightLimitSw) == HIGH);
+  } while (digitalRead(LIM1_RGHT_PIN) == HIGH);
   moveStage(-1 * HomeBackOffSteps, false, true);
   Beep(3);
 }
@@ -852,10 +826,10 @@ void ManualHome()
       Beep(3);
       do
       {
-      } while (digitalRead(HomeButtonPin) == LOW); //button lockout loop
+      } while (digitalRead(STG_HOME_PIN) == LOW); //button lockout loop
       //Start(); Originally, this function called Start(); again. I'm not sure why exactly.
     }
-  } while (digitalRead(RightLimitSw) == HIGH);
+  } while (digitalRead(LIM1_RGHT_PIN) == HIGH);
 }
 /**
  * @brief Invoked when a manual jog function is called.
@@ -867,19 +841,19 @@ void ManualJogFunc(bool left)
   int buttonPin;
   if (left)
   {
-    buttonPin = JogLeftButtonPin;
-    digitalWrite(StepperDirPin, HIGH);
+    buttonPin = STG_LEFT_PIN;
+    digitalWrite(DIR_PIN, HIGH);
   }
   else
   {
-    buttonPin = JogRightButtonPin;
-    digitalWrite(StepperDirPin, LOW);
+    buttonPin = STG_RGHT_PIN;
+    digitalWrite(DIR_PIN, LOW);
   }
   do
   {
-    digitalWrite(StepperPulseOutputPin, HIGH);
+    digitalWrite(STEP_PIN, HIGH);
     delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
-    digitalWrite(StepperPulseOutputPin, LOW);
+    digitalWrite(STEP_PIN, LOW);
     delay(50);
     int limits = checkLimits();
     if (limits != 0)
@@ -897,11 +871,11 @@ void ManualJogFunc(bool left)
  */
 int checkLimits()
 {
-  if (digitalRead(RightLimitSw) == 0)
+  if (digitalRead(LIM1_RGHT_PIN) == 0)
   {
     return -1;
   }
-  if (digitalRead(LeftLimitSw) == 0)
+  if (digitalRead(LIM2_LEFT_PIN) == 0)
   {
     return 1;
   }
@@ -917,7 +891,7 @@ void limitErrorMessage(int limits)
 {
   if (limits != 0)
   {
-    digitalWrite(pwmOutPin, LOW); //disable laser output if on
+    digitalWrite(LASER_EN_PIN, LOW); //disable laser output if on
     lcd_clear();
     lcd_println("ERROR:");
     lcd_println("STAGE MOVED TOO FAR");
@@ -1049,13 +1023,15 @@ void lcd_scroll()
  * @brief Deletes (replaces with '\0') the character to the left of the cursor, and moves the cursor leftwards 1 column.
  * 
  */
-void lcd_backsp() {
-  if (lcd_x == 0) {
+void lcd_backsp()
+{
+  if (lcd_x == 0)
+  {
     return;
   }
   lcd_x--;
   lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height][lcd_x] = '\0';
-  
+
   lcd.setCursor(lcd_x, lcd_y);
   lcd.write(' ');
   lcd.setCursor(lcd_x, lcd_y);
@@ -1064,7 +1040,8 @@ void lcd_backsp() {
  * @brief Returns a copy of the row where the cursor is at.
  * 
  */
-String lcd_getLine() {
+String lcd_getLine()
+{
   //char[lcd_width + 1] copy;
   //strcpy(copy, lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height]);
   // TODO: I didn't find whether the String constructor actually copies the string or uses a reference!
