@@ -4,27 +4,21 @@
                                    ARDUINO PROGRAM(SKETCH) FOR LASER PENCIL ENGRAVER BREADBOARD
 *********************************************************************************************************************************************
 *********************************************************************************************************************************************
-
 File: ArduinoLaserPencilSketch_Rev1 (.ino) 
 Date: 11/11/18
-
 This is an experimental project, not a plug and play unit. It works great. I have successfully burned hundreds of pencils and other materials.
 As you construct and integrate the various mechanical, optical and electrical components, please take the time to test the laser, galvos and
 x-axis stage by themselves before integrating them into a system. The DAC electrical drives for the galvos also need to be tested prior
 to hooking the signals to the galvos, to prevent the galvos from being overdriven and damaged.
-
 The laser is not eye-safe so please use the googles. 
-
 Disclaimer:
 I am a laser guy, not a software guy. This Arduino program may not be pretty but it works. If the system goes off track, push the START button
 and try again. 
-
 ******************************************************
 Project Title:
 LASERS, MIRRORS AND NO.2 PENCILS
 or Building a Breadboard on a Breadboard
 ******************************************************
-
 Microcontroller:
 IDE Microcontroller: Tools/Board/Arduino Mega 2560
 IDE Programmer: Tools/Programmer/Arduino as ISP
@@ -36,9 +30,7 @@ USB Programming Connector on Arduino Mega board: Must use modified USB cable, wi
 Program memory space: 258K bytes
 Program memory used: 16K bytes
 Available interrupt pins: 2,3,21,20,19,18 (int0,1,2,3,4,5)
-
 40 characters = ~4 inches on a pencil.
-
 */
 
 #include <PS2Keyboard.h> //Keyboard
@@ -145,7 +137,7 @@ void moveStage(int, bool = true, bool = false); //damn you cpp
 //to form lower case letters, go for it.
 //The function keys(F1-F12) are not recognized at present.
 
-//                                                                                              Key    ASCII
+//                                                                                                                                               Key    ASCII
 byte CharacterArray[96][46] = {
     9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  //SPACE  32
     3, 1, 3, 3, 3, 4, 3, 5, 3, 6, 3, 7, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  //!      33
@@ -914,6 +906,16 @@ uint8_t lcd_x = 0;
 
 char lcd_screen[lcd_height][lcd_width + 1]; // (lcd_width+1, for the \0 at the line end)
 uint8_t lcd_screen_wrap = 0;
+
+// LCD text editing:
+bool lcd_editMode = false;
+// Internally set to true while using the print functions during edit mode.
+bool lcd_editMode_printOverride = false;
+String lcd_editMode_input = "";
+String lcd_editMode_prompt;
+uint8_t lcd_editMode_oldLcdX;
+uint8_t lcd_editMode_oldLcdY;
+
 /**
  * @brief Initializes the LCD. Should be called during startup.
  * 
@@ -1000,8 +1002,6 @@ void lcd_lineBreak()
  */
 void lcd_scroll()
 {
-  lcd.clear();
-
   // Clear the (soon to be) last line:
   for (int x = 0; x < lcd_width; x++)
   {
@@ -1011,23 +1011,99 @@ void lcd_scroll()
   lcd_screen_wrap = (lcd_screen_wrap + 1) % lcd_height;
 
   // Update LCD:
-  for (uint8_t y = 0; y < lcd_height; y++)
-  {
-    lcd.setCursor(0, y);
-    lcd.print(lcd_screen[(y + lcd_screen_wrap) % lcd_height]);
-  }
+  lcd_repaint();
   lcd_y--;
   lcd.setCursor(lcd_x, lcd_y);
 }
+
+void lcd_repaint()
+{
+  lcd.clear();
+  if (lcd_editMode)
+  {
+    lcd_println(lcd_editMode_prompt);
+    lcd_print(lcd_editMode_input);
+  } else {
+    for (uint8_t y = 0; y < lcd_height; y++)
+    {
+      lcd.setCursor(0, y);
+      lcd.print(lcd_screen[(y + lcd_screen_wrap) % lcd_height]);
+    }
+  }
+}
+
+/**
+ * @brief Turns edit mode on.
+ * Important: any text printing done in edit mode will suspend text input to display the message. Press Enter to resume input. (TODO)
+ * 
+ * @param prompt Text prompt.
+ * 
+ */
+void lcd_editMode_on(String prompt)
+{
+  lcd_editMode = true;
+  lcd_editMode_input.reserve(16);
+  lcd_editMode_prompt = prompt;
+  lcd_repaint();
+  lcd_editMode_oldLcdX = lcd_x;
+  lcd_editMode_oldLcdY = lcd_y;
+}
+/**
+ * @brief Turns edit mode off, returning the inputted text.
+ * The text that was previously on the screen will be displayed again.
+ * 
+ */
+String lcd_editMode_off()
+{
+  lcd_editMode = false;
+  lcd_repaint();
+  lcd_x = lcd_editMode_oldLcdX;
+  lcd_y = lcd_editMode_oldLcdY;
+  lcd_editMode_prompt = "";
+  // TODO: does this make any sense?:
+  String ret = lcd_editMode_input;
+  lcd_editMode_input = "";
+  return ret;
+}
+/**
+ * @brief Type a character, in edit mode.
+ * 
+ */
+String lcd_editMode_type(char letter)
+{
+  lcd_editMode_input += letter;
+  lcd_editMode_printOverride = true;
+  lcd_print(String(letter));
+  lcd_editMode_printOverride = false;
+}
+void lcd_editMode_backsp()
+{
+  if (lcd_editMode_input.length() == 0)
+  {
+    Beep(1);
+    return;
+  }
+  
+  lcd_editMode_input.remove(lcd_editMode_input.length()-2);
+  lcd_repaint();
+}
+
 /**
  * @brief Deletes (replaces with '\0') the character to the left of the cursor, and moves the cursor leftwards 1 column.
  * 
  */
-void lcd_backsp()
+/*void lcd_backsp()
 {
   if (lcd_x == 0)
   {
-    return;
+    if (lcd_y == 0)
+    {
+      Beep(1);
+      return;
+    } else {
+      lcd_y--;
+      lcd_x = lcd_width;
+    }
   }
   lcd_x--;
   lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height][lcd_x] = '\0';
@@ -1035,15 +1111,15 @@ void lcd_backsp()
   lcd.setCursor(lcd_x, lcd_y);
   lcd.write(' ');
   lcd.setCursor(lcd_x, lcd_y);
-}
+}*/
 /**
  * @brief Returns a copy of the row where the cursor is at.
  * 
  */
-String lcd_getLine()
+/*String lcd_getLine()
 {
   //char[lcd_width + 1] copy;
   //strcpy(copy, lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height]);
   // TODO: I didn't find whether the String constructor actually copies the string or uses a reference!
   return String(lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height]);
-}
+}*/
