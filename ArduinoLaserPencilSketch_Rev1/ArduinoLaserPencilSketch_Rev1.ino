@@ -40,6 +40,7 @@ PS2Keyboard keyboard;
 
 // LCD over I²C screen:
 #define lcd_width 20
+// Must be 2 or more:
 #define lcd_height 4
 LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x27 for a 20 chars and 4 line display
 
@@ -898,9 +899,17 @@ void limitErrorMessage(int limits)
 //**************************************************************************************************************************************
 //                                                       LCD Functions
 //**************************************************************************************************************************************
-// [Or is it...?]
+// *Important:*
+// There are two screens with their own buffers, the "console screen" and the "input screen".
+// The console screen is where text printing goes.
+// The input screen, used for text input, has a one-line prompt, and a caller-supplied 3-line text buffer.
+// These functions switch the screen automatically (i.e. print functions switch to the console screen, and edit mode functions switch to the input screen).
+// The console screen scrolls when text exceeds the bottom of the screen, and scrollback would be somewhat easy to program.
+// 
+// TODO:
+//   Program text inputting;
+//   Test code, then integrate into the laser engraver code.
 
-// Word-wrap LCD:
 uint8_t lcd_y = 0; // which line
 uint8_t lcd_x = 0;
 
@@ -911,10 +920,8 @@ uint8_t lcd_screen_wrap = 0;
 bool lcd_editMode = false;
 // Internally set to true while using the print functions during edit mode.
 bool lcd_editMode_printOverride = false;
-String lcd_editMode_input = "";
-String lcd_editMode_prompt;
-uint8_t lcd_editMode_oldLcdX;
-uint8_t lcd_editMode_oldLcdY;
+char lcd_editMode_prompt[lcd_width + 1];
+char *lcd_editMode_input;
 
 /**
  * @brief Initializes the LCD. Should be called during startup.
@@ -945,6 +952,11 @@ void lcd_println(String text)
  */
 void lcd_print(String text)
 {
+  if (lcd_editMode) {
+    lcd_editMode = false;
+    lcd_repaint();
+  }
+  
   char currentChar;
   for (int i = 0;; i++)
   {
@@ -977,9 +989,21 @@ void lcd_print(String text)
  */
 void lcd_clear()
 {
+  if (lcd_editMode) {
+    lcd_editMode = false;
+  }
+  
   lcd.clear();
   lcd_x = 0;
   lcd_y = 0;
+  
+  // Clear the text buffer:
+  for (uint8_t y = 0; y < lcd_height; y++) {
+    for (uint8_t x = 0; x < lcd_width; x++)
+    {
+      lcd_screen[y][x] = '\0';
+    }
+  }
 }
 /**
  * @brief Moves to next LCD line. Resets cursor to beginning of line.
@@ -987,6 +1011,11 @@ void lcd_clear()
  */
 void lcd_lineBreak()
 {
+  if (lcd_editMode) {
+    lcd_editMode = false;
+    lcd_repaint();
+  }
+  
   lcd_x = 0;
   lcd_y++;
   if (lcd_y == lcd_height)
@@ -997,22 +1026,27 @@ void lcd_lineBreak()
   }
 }
 /**
- * @brief Scrolls the LCD down one line.
+ * @brief Scrolls the LCD down one line. For the console screen.
  * 
  */
 void lcd_scroll()
 {
+  if (lcd_editMode) {
+    lcd_editMode = false;
+    lcd_repaint();
+  }
+  
   // Clear the (soon to be) last line:
-  for (int x = 0; x < lcd_width; x++)
+  for (uint8_t x = 0; x < lcd_width; x++)
   {
     lcd_screen[lcd_screen_wrap][x] = '\0';
   }
   // Scroll:
   lcd_screen_wrap = (lcd_screen_wrap + 1) % lcd_height;
+  lcd_y--;
 
   // Update LCD:
   lcd_repaint();
-  lcd_y--;
   lcd.setCursor(lcd_x, lcd_y);
 }
 
@@ -1021,8 +1055,25 @@ void lcd_repaint()
   lcd.clear();
   if (lcd_editMode)
   {
-    lcd_println(lcd_editMode_prompt);
-    lcd_print(lcd_editMode_input);
+    lcd.print(lcd_editMode_prompt);
+    
+    uint8_t ixw; // i times lcd_width
+    char tempChar; // Certain characters will need to be temporarily replaced with '\0' while printing lines.
+    // Print the lines of input, stopping when there are no more lines or a line is empty:
+    for (uint8_t i = 0; i < lcd_height-1 || lcd_editMode_input[i*lcd_width] == '\0'; i++) {
+      ixw = i*lcd_width;
+      
+      tempChar = lcd_editMode_input[ixw];
+      lcd_editMode_input[ixw] = '\0';
+      
+      lcd.setCursor(0, i + 1);
+      lcd.print(&(lcd_editMode_input[ixw]));
+      
+      lcd_editMode_input[ixw] = tempChar;
+    }
+    
+    // Set the position of the cursor:
+    lcd.setCursor((lcd_editMode_i % lcd_width) + 1, lcd_editMode_i / lcd_width);
   } else {
     for (uint8_t y = 0; y < lcd_height; y++)
     {
@@ -1033,27 +1084,84 @@ void lcd_repaint()
 }
 
 /**
- * @brief Turns edit mode on.
- * Important: any text printing done in edit mode will suspend text input to display the message. Press Enter to resume input. (TODO)
+ * @brief Turns edit mode on, switching to the input screen and prompting the user for text input.
+ * Set the lcd_editMode_prompt variable to the prompt string.
  * 
- * @param prompt Text prompt.
+ * @param input The input buffer to use. The length MUST BE THIS LENGTH OR SHORTER: lcd_width*(lcd_height-1) + 1. (One row less, for the prompt. One element more, for '\0'). The input buffer is allowed to already have text in it, but all other characters must be '\0'.
+ * @param maxLen Then maximum length of supplied input buffer.
  * 
  */
-void lcd_editMode_on(String prompt)
+void lcd_editMode_init(char input[lcd_width*(lcd_height-1) + 1], int maxLen)
 {
+  lcd_editMode_input = input;
+  lcd_editMode_maxLen = maxLen;
+  
   lcd_editMode = true;
-  lcd_editMode_input.reserve(16);
-  lcd_editMode_prompt = prompt;
   lcd_repaint();
-  lcd_editMode_oldLcdX = lcd_x;
-  lcd_editMode_oldLcdY = lcd_y;
 }
+
+/**
+ * @brief Switch to the console screen.
+ * The text that was previously on the screen will be displayed again.
+ * Use the input buffer supplied to lcd_editMode_on() contains the inputted text.
+ * 
+ * 
+ */
+int lcd_editMode_off()
+{
+  lcd_editMode = false;
+  lcd_repaint();
+  
+  return lcd_editMode_i
+}
+
+void lcd_editMode_type(char c)
+{
+  if (!lcd_editMode) {
+    lcd_editMode = true;
+    lcd_repaint();
+  }
+  
+  if lcd_editMode_i == lcd_editMode_maxLen-1 {
+    Beep(1);
+    return;
+  }
+  
+  lcd_editMode_i++;
+  lcd_editMode_input[lcd_editMode_i] = c;
+  
+  // Reposition the cursor if it's at the end of the line:
+  if lcd_editMode_i % lcd_width == 0 {
+    // Set the position of the cursor:
+    lcd.setCursor((lcd_editMode_i % lcd_width) + 1, lcd_editMode_i / lcd_width);
+  }
+  
+  lcd.print(c);
+}
+
+void lcd_editMode_backsp() {
+  if (!lcd_editMode) {
+    lcd_editMode = true;
+    lcd_repaint();
+  }
+  
+  if lcd_editMode_i == 0 {
+    Beep(1);
+    return;
+  }
+  
+  lcd_editMode_input[lcd_editMode_i] = '\0';
+  lcd_editMode_i--;
+}
+
+
+
 /**
  * @brief Turns edit mode off, returning the inputted text.
  * The text that was previously on the screen will be displayed again.
  * 
  */
-String lcd_editMode_off()
+/*String lcd_editMode_off()
 {
   lcd_editMode = false;
   lcd_repaint();
@@ -1064,12 +1172,12 @@ String lcd_editMode_off()
   String ret = lcd_editMode_input;
   lcd_editMode_input = "";
   return ret;
-}
+}*/
 /**
  * @brief Type a character, in edit mode.
  * 
  */
-String lcd_editMode_type(char letter)
+/*String lcd_editMode_type(char letter)
 {
   lcd_editMode_input += letter;
   lcd_editMode_printOverride = true;
@@ -1086,7 +1194,7 @@ void lcd_editMode_backsp()
   
   lcd_editMode_input.remove(lcd_editMode_input.length()-2);
   lcd_repaint();
-}
+}*/
 
 /**
  * @brief Deletes (replaces with '\0') the character to the left of the cursor, and moves the cursor leftwards 1 column.
@@ -1107,7 +1215,6 @@ void lcd_editMode_backsp()
   }
   lcd_x--;
   lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height][lcd_x] = '\0';
-
   lcd.setCursor(lcd_x, lcd_y);
   lcd.write(' ');
   lcd.setCursor(lcd_x, lcd_y);
