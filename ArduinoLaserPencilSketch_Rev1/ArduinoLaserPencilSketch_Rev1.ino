@@ -4,27 +4,21 @@
                                    ARDUINO PROGRAM(SKETCH) FOR LASER PENCIL ENGRAVER BREADBOARD
 *********************************************************************************************************************************************
 *********************************************************************************************************************************************
-
 File: ArduinoLaserPencilSketch_Rev1 (.ino) 
 Date: 11/11/18
-
 This is an experimental project, not a plug and play unit. It works great. I have successfully burned hundreds of pencils and other materials.
 As you construct and integrate the various mechanical, optical and electrical components, please take the time to test the laser, galvos and
 x-axis stage by themselves before integrating them into a system. The DAC electrical drives for the galvos also need to be tested prior
 to hooking the signals to the galvos, to prevent the galvos from being overdriven and damaged.
-
 The laser is not eye-safe so please use the googles. 
-
 Disclaimer:
 I am a laser guy, not a software guy. This Arduino program may not be pretty but it works. If the system goes off track, push the START button
 and try again. 
-
 ******************************************************
 Project Title:
 LASERS, MIRRORS AND NO.2 PENCILS
 or Building a Breadboard on a Breadboard
 ******************************************************
-
 Microcontroller:
 IDE Microcontroller: Tools/Board/Arduino Mega 2560
 IDE Programmer: Tools/Programmer/Arduino as ISP
@@ -36,9 +30,7 @@ USB Programming Connector on Arduino Mega board: Must use modified USB cable, wi
 Program memory space: 258K bytes
 Program memory used: 16K bytes
 Available interrupt pins: 2,3,21,20,19,18 (int0,1,2,3,4,5)
-
 40 characters = ~4 inches on a pencil.
-
 */
 
 #include <PS2Keyboard.h> //Keyboard
@@ -48,7 +40,26 @@ PS2Keyboard keyboard;
 
 // LCD over I²C screen:
 #define lcd_width 20
+// Must be 2 or more:
 #define lcd_height 4
+
+uint8_t lcd_y = 0; // which line
+uint8_t lcd_x = 0;
+
+char lcd_screen[lcd_height][lcd_width + 1]; // (lcd_width+1, for the \0 at the line end)
+uint8_t lcd_screen_wrap = 0;
+
+// LCD text editing:
+bool lcd_editMode = false;
+int lcd_editMode_i = 0; // The position of the text input caret.
+int lcd_editMode_len = 0; // The current length of inputted text.
+int lcd_editMode_maxLen = 0; // The maximum length of lcd_editMode_input.
+// Internally set to true while using the print functions during edit mode.
+bool lcd_editMode_printOverride = false;
+// SoME commenT
+const char *lcd_editMode_prompt;
+char *lcd_editMode_input;
+
 LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x27 for a 20 chars and 4 line display
 
 //Declare Pins
@@ -145,7 +156,7 @@ void moveStage(int, bool = true, bool = false); //damn you cpp
 //to form lower case letters, go for it.
 //The function keys(F1-F12) are not recognized at present.
 
-//                                                                                              Key    ASCII
+//                                                                                                                                               Key    ASCII
 byte CharacterArray[96][46] = {
     9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  //SPACE  32
     3, 1, 3, 3, 3, 4, 3, 5, 3, 6, 3, 7, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  //!      33
@@ -906,14 +917,17 @@ void limitErrorMessage(int limits)
 //**************************************************************************************************************************************
 //                                                       LCD Functions
 //**************************************************************************************************************************************
-// [Or is it...?]
+// *Important:*
+// There are two screens with their own buffers, the "console screen" and the "input screen".
+// The console screen is where text printing goes.
+// The input screen, used for text input, has a one-line prompt, and a caller-supplied 3-line text buffer.
+// These functions switch the screen automatically (i.e. print functions switch to the console screen, and edit mode functions switch to the input screen).
+// The console screen scrolls when text exceeds the bottom of the screen, and scrollback would be somewhat easy to program.
+// 
+// TODO:
+//   Program line editing. Some primitive work on this is done, such as there being separate lcd_editMode_i and lcd_editMode_len variables.
+//   Test code, then integrate into the laser engraver code.
 
-// Word-wrap LCD:
-uint8_t lcd_y = 0; // which line
-uint8_t lcd_x = 0;
-
-char lcd_screen[lcd_height][lcd_width + 1]; // (lcd_width+1, for the \0 at the line end)
-uint8_t lcd_screen_wrap = 0;
 /**
  * @brief Initializes the LCD. Should be called during startup.
  * 
@@ -922,6 +936,7 @@ void lcd_init()
 {
   lcd.init();
   lcd.backlight();
+  lcd_clear();
   /*for (int i = 0; i < lcd_width*lcd_height) {
         lcd_screen[i] = '\0';
     }*/
@@ -937,18 +952,22 @@ void lcd_println(String text)
   lcd_lineBreak();
 }
 /**
- * @brief Prints a message to the LCD.
+ * @brief Prints a message to the LCD. '\n' is the only supported control character.
  * 
  * @param text The message to be printed. (String is used for ease of conversion)
  */
 void lcd_print(String text)
 {
+  if (lcd_editMode) {
+    lcd_editMode = false;
+    lcd_repaint();
+  }
+  
+  int len = text.length();
   char currentChar;
-  for (int i = 0;; i++)
+  for (int i = 0; i < len; i++)
   {
     currentChar = text.charAt(i);
-    if (currentChar == '\0')
-      break;
 
     if (currentChar == '\n')
     {
@@ -970,14 +989,25 @@ void lcd_print(String text)
   }
 }
 /**
- * @brief Clears the LCD and resets cursor.
+ * @brief Clears the console screen.
  * 
  */
 void lcd_clear()
 {
-  lcd.clear();
+  if (!lcd_editMode) {
+    lcd.clear();
+  }
+  
   lcd_x = 0;
   lcd_y = 0;
+  
+  // Clear the text buffer:
+  for (uint8_t y = 0; y < lcd_height; y++) {
+    for (uint8_t x = 0; x < lcd_width+1; x++)
+    {
+      lcd_screen[y][x] = '\0';
+    }
+  }
 }
 /**
  * @brief Moves to next LCD line. Resets cursor to beginning of line.
@@ -985,6 +1015,11 @@ void lcd_clear()
  */
 void lcd_lineBreak()
 {
+  if (lcd_editMode) {
+    lcd_editMode = false;
+    lcd_repaint();
+  }
+  
   lcd_x = 0;
   lcd_y++;
   if (lcd_y == lcd_height)
@@ -992,58 +1027,183 @@ void lcd_lineBreak()
     // SOMEONE ANYONE HELP WE'RE OUT OF SCREEN 😱😱😱😱
     // I KNOW!! LCD_SCROLL TO THE RESCUE!!!!!!!!!1
     lcd_scroll();
+  } else {
+    lcd.setCursor(lcd_x, lcd_y);
   }
 }
 /**
- * @brief Scrolls the LCD down one line.
+ * @brief Scrolls the LCD down one line. For the console screen.
  * 
  */
 void lcd_scroll()
 {
-  lcd.clear();
-
+  if (lcd_editMode) {
+    lcd_editMode = false;
+    lcd_repaint();
+  }
+  
   // Clear the (soon to be) last line:
-  for (int x = 0; x < lcd_width; x++)
+  for (uint8_t x = 0; x < lcd_width; x++)
   {
     lcd_screen[lcd_screen_wrap][x] = '\0';
   }
   // Scroll:
   lcd_screen_wrap = (lcd_screen_wrap + 1) % lcd_height;
+  lcd_y--;
 
   // Update LCD:
-  for (uint8_t y = 0; y < lcd_height; y++)
-  {
-    lcd.setCursor(0, y);
-    lcd.print(lcd_screen[(y + lcd_screen_wrap) % lcd_height]);
-  }
-  lcd_y--;
-  lcd.setCursor(lcd_x, lcd_y);
+  lcd_repaint();
 }
+
 /**
- * @brief Deletes (replaces with '\0') the character to the left of the cursor, and moves the cursor leftwards 1 column.
+ * @brief Repaints the screen and resets the cursor appearance and position.
  * 
  */
-void lcd_backsp()
+void lcd_repaint()
 {
-  if (lcd_x == 0)
+  lcd.clear(); // LATER: clear manually with spaces as you print the content of a screen.
+  if (lcd_editMode)
   {
+    lcd.print(lcd_editMode_prompt);
+    
+    uint8_t ixw; // i times lcd_width
+    char tempChar; // Certain characters will need to be temporarily replaced with '\0' while printing lines.
+    // Print the lines of input, stopping when there are no more lines or a line is empty:
+    for (uint8_t i = 0; i <= lcd_height-1; i++) {
+      ixw = i*lcd_width;
+      
+      lcd.setCursor(0, i + 1);
+      
+      if (ixw+lcd_width > lcd_editMode_maxLen) { // If this line is the last, don't add the null char.
+        lcd.print(&(lcd_editMode_input[ixw]));
+      } else {
+        tempChar = lcd_editMode_input[ixw];
+        lcd_editMode_input[ixw] = '\0';
+        
+        lcd.print(&(lcd_editMode_input[ixw]));
+        
+        lcd_editMode_input[ixw] = tempChar;
+      }
+    }
+    
+    // Set the position of the cursor:
+    lcd_editMode_posCur();
+    
+    lcd.cursor();
+    lcd.blink();
+  } else {
+    // LATER: it's inefficient to have these calls in the repaint function, they could be called redundantly.
+    lcd.noCursor();
+    lcd.noBlink();
+    
+    for (uint8_t y = 0; y < lcd_height; y++)
+    {
+      lcd.setCursor(0, y);
+      lcd.print(lcd_screen[(y + lcd_screen_wrap) % lcd_height]);
+    }
+    
+    lcd.setCursor(lcd_x, lcd_y);
+  }
+}
+
+/**
+ * @brief Turns edit mode on, switching to the input screen and prompting the user for text input.
+ * Set the lcd_editMode_prompt variable to the prompt string.
+ * 
+ * @param input The input buffer to use. The length MUST BE THIS LENGTH OR SHORTER: lcd_width*(lcd_height-1)+1-1. (One row less, for the prompt. One element more and one element less, for '\0' and physical space for the cursor). The input buffer is allowed to already have text in it, but all other characters must be '\0'.
+ * @param maxLen Then maximum length of supplied input buffer, so 1 less than the buffer's length due to '\0'. See @param input
+ * 
+ */
+void lcd_editMode_init(char *input, int maxLen)
+{
+  lcd_editMode_input = input;
+  lcd_editMode_maxLen = maxLen;
+  
+  lcd_editMode_len = 0;
+  lcd_editMode_i = 0;
+  
+  lcd_editMode = true;
+  lcd_repaint();
+}
+
+/**
+ * @brief Switch to the console screen.
+ * The text that was previously on the screen will be displayed again.
+ * Use the input buffer supplied to lcd_editMode_on() contains the inputted text.
+ * 
+ * 
+ */
+int lcd_editMode_off()
+{
+  lcd_editMode = false;
+  lcd_repaint();
+  
+  return lcd_editMode_len;
+}
+
+void lcd_editMode_type(char c)
+{
+  if (!lcd_editMode) {
+    lcd_editMode = true;
+    lcd_repaint();
+  }
+  
+  if (lcd_editMode_len == lcd_editMode_maxLen) {
+    Beep(1);
     return;
   }
-  lcd_x--;
-  lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height][lcd_x] = '\0';
-
-  lcd.setCursor(lcd_x, lcd_y);
-  lcd.write(' ');
-  lcd.setCursor(lcd_x, lcd_y);
+  
+  // If the cursor has been moved from the end of the input, shift characters 1 to the right:
+  if (lcd_editMode_i != lcd_editMode_len) {
+    // TODO: do the shifting. Also, line editing.
+  }
+  
+  lcd_editMode_input[lcd_editMode_i] = c;
+  lcd_editMode_len++;
+  lcd_editMode_i++;
+  
+  lcd.write(c);
+  
+  // Reposition the cursor if it's at the end of the line:
+  if (lcd_editMode_i % lcd_width == 0) {
+    // Set the position of the cursor:
+    lcd_editMode_posCur();
+  }
 }
+
 /**
- * @brief Returns a copy of the row where the cursor is at.
+ * @brief Backspace.
  * 
  */
-String lcd_getLine()
+void lcd_editMode_backsp()
 {
-  //char[lcd_width + 1] copy;
-  //strcpy(copy, lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height]);
-  // TODO: I didn't find whether the String constructor actually copies the string or uses a reference!
-  return String(lcd_screen[(lcd_y + lcd_screen_wrap) % lcd_height]);
+  if (!lcd_editMode) {
+    lcd_editMode = true;
+    lcd_repaint();
+  }
+  
+  if (lcd_editMode_i == 0) {
+    Beep(1);
+    return;
+  }
+  
+  if (lcd_editMode_i != lcd_editMode_len) {
+    // TODO: do the shifting. Also, line editing.
+ 	}
+  
+  lcd_editMode_i--;
+  lcd_editMode_input[lcd_editMode_i] = '\0';
+  
+  // Clear the backspace-d character
+  lcd_editMode_posCur();
+  lcd.write(' ');
+  lcd_editMode_posCur();
+}
+
+/**
+ * @brief Reposition the LCD cursor in editMode.
+ */
+void lcd_editMode_posCur()
+{
+  lcd.setCursor(lcd_editMode_i % lcd_width, (lcd_editMode_i / lcd_width) + 1);
 }
