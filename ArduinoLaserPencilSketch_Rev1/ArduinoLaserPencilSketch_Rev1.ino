@@ -57,7 +57,7 @@ int lcd_editMode_maxLen = 0; // The maximum length of lcd_editMode_input.
 // Internally set to true while using the print functions during edit mode.
 bool lcd_editMode_printOverride = false;
 // SoME commenT
-const char *lcd_editMode_prompt;
+const char *lcd_editMode_prompt = "Edit Below:";
 char *lcd_editMode_input;
 
 LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x27 for a 20 chars and 4 line display
@@ -89,14 +89,12 @@ LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x
 #define KB_CLK_PIN 2     //CLK on EE-1003
 
 //Declare User Values
-#define KeyboardInterStrokeDelay 200        //milliseconds
 #define BeamGrossVerticalOffset 0           //out of 1023   Coarse vertical offset
-#define BeamGrossHorizOffset 0              //out of 1023   Coarse horiz offset
-#define BurnDelayDivisor 2                  //1023/2 = 512ms max
+#define BeamGrossHorizOffset 0              //out o3 1023   Coarse horiz offset
+#define BurnDelayDivisor 3                  //1023/3 = 341ms max
 #define CharSizeDivisor 90                  //1023/90 = 11 max
 #define CharSpaceDivisor 90                 //1023/90 = 11 max
 #define yOffsetDivisor 16                   //1023/16 = 64  max Fine vertical offset
-#define TimeForStageToMoveOneCharacter 1500 //set at 1.5 seconds
 #define HomeBackOffSteps 100               // number of steps to move off of the limit switch during homing.
 
 //Declare General Variables
@@ -333,12 +331,7 @@ void loop()
 
 void Start()
 {
-  lcd_clear();
-  lcd_println("START:TYPE 1,2 OR 3");
-  lcd_println("1.NEW MESSAGE");
-  lcd_println("2.REPEAT BURN");
-  lcd_print("3.CHARACTER ADJUST");
-
+  printStartMenu();
 Loop1:
   if ((digitalRead(STG_LEFT_PIN)) == 0)
     ManualJogFunc(true);
@@ -357,6 +350,7 @@ Loop1:
       MessageFormatting();
       TypeNewMessage();
       BurnMessageSequence();
+      printStartMenu();
     }
 
     if (c == 50) // 2. REPEAT BURN (comment from sam: what happens if you press this when you hadn't burned already)
@@ -364,6 +358,7 @@ Loop1:
       lcd_clear();
       Beep(1);
       BurnMessageSequence();
+      printStartMenu();
     }
 
     if (c == 51) // 3. CHARACTER ADJUST
@@ -371,6 +366,7 @@ Loop1:
       lcd_clear();
       Beep(1);
       AdjCharSizes();
+      printStartMenu();
     }
 
     if ((c <= 48) || (c >= 52)) //error check for incorrect keyboard choices
@@ -380,6 +376,14 @@ Loop1:
     }
   }
   goto Loop1;
+}
+
+void printStartMenu(){
+  lcd_clear();
+  lcd_println("START:TYPE 1,2 OR 3");
+  lcd_println("1.NEW MESSAGE");
+  lcd_println("2.REPEAT BURN");
+  lcd_print("3.CHARACTER ADJUST");
 }
 
 void MessageFormatting()
@@ -413,48 +417,41 @@ void TypeNewMessage()
   int cnt = 0;
   int ch;
   char ch1;
-  byte KeyFlag = 0;
+  
   lcd_clear();
   lcd.blink();
-
-MessLoop:
-  if (keyboard.available())
+  ch = keyboard.read();
+  while (ch != 13)  //the only thing here is backspace doesnt work. I'm assuming you are working on that. Rewrote without goto.
   {
-    ch = keyboard.read();
-    if (ch == 13)
-      goto NewMessDone; // a CR(ENTER) will terminate the table
-    if (ch == 127)      //backspace or delete
+    if (keyboard.available())
     {
-      if (cnt == 0)
-        goto MessLoop;
-      Serial.write(8); //ASCII backspace
-      Beep(1);
-      cnt = cnt - 1;
-      goto MessLoop;
+      ch = keyboard.read();
+      if (ch != 13 && ch != 127 && CharacterArray[ch - 32][1] != 0)
+      { //not enter, not bksp, character exists
+        lcd_print(String(char(ch)));
+        MessageTable[cnt] = ch;
+        cnt++;
+      }
+      else if (ch != 13 && ch != 127 && CharacterArray[ch - 32][1] == 0)
+      { //character doesnt exist, still not enter or bksp (foolproofing ig?)
+        Beep(3);
+      }
+      else if (ch == 127)
+      { //if you hit backspace
+        if (cnt > 0)
+        {
+          MessageTable[cnt - 1] = {0};
+          //lcd_editMode_backsp(); this function didnt really work so up 2 u ig
+          cnt--;
+        }
+        else
+        {
+          Beep(3);
+        }
+      }
     }
-
-    //Check for characters NOT IMPLEMENTED YET
-    //by checking for 0,0 as the first dot
-    //Also let <ENTER> and DEL go through
-    if ((CharacterArray[ch - 32][1] == 0) && (ch != 13) && (ch != 127))
-    {
-      Beep(3);
-      goto MessLoop;
-    }
-    lcd_print(String(char(ch)));
-    Beep(1);
-
-    delay(KeyboardInterStrokeDelay); //typ: 200ms, the keyboard seems to lockup or
-                                     //something at odd times so I added this delay.
-    MessageTable[cnt] = ch;
-    cnt++;
   }
-
-  goto MessLoop;
-NewMessDone:
-  //Serial.write(4);   //turn off LCD cursor
   Beep(2);
-  delay(300);
   NumberOfChars = cnt;
 }
 
@@ -465,66 +462,60 @@ void BurnMessageSequence()
 
   byte ch;
 
-  lcd_clear(); //clear LCD screen
+  lcd_clear();
   lcd_println("-STANDBY: WAIT FOR");
   lcd_println(" STAGE TO STOP");
-  Home(); //move stage to Home(right) position //******************************************************************************************
+  Home();
   Beep(1);
-  lcd_clear(); //clear LCD screen
+  lcd_clear();
   lcd_println("-MOUNT PENCIL");
   lcd_println("-PUT ON GOOGLES");
   lcd_println("-PUSH BURN BUTTON OR");
   lcd_print(" HOLD STOP TO QUIT");
   do
   {
-  } while (digitalRead(BURN_PIN) == 1);
-  Beep(1);
-  lcd_clear();
+  } while (digitalRead(BURN_PIN) == HIGH && digitalRead(STP_BRN_PIN) == HIGH);
+  if (digitalRead(STP_BRN_PIN) != LOW)
+  {
+    Beep(1);
+    lcd_clear();
+    ReadPots();
+    BurnMessage();
 
-  //*******************************
-  //turn on laser, start burning
-  //letters and advancing stage
-  //*******************************
-  BurnMessage();
-
-  Beep(3);
-  lcd_clear(); //clear screen
-  lcd_println("-BURN CYCLE DONE");
-  lcd_println("-REMOVE PENCIL");
-  lcd_println("<ENTER>");
-  WaitForEnterKey();
-  Beep(1);
+    Beep(3);
+    lcd_clear();
+    lcd_println("-BURN CYCLE DONE");
+    lcd_println("-REMOVE PENCIL");
+    lcd_println("<ENTER>");
+    WaitForEnterKey();
+    Beep(1);
+  }else {
+    lcd_clear();
+    lcd_println("-Burn Cycle Stop");
+    lcd_println("-Return to Menu");
+    lcd_println("<ENTER>");
+    WaitForEnterKey();
+    Beep(1);
+  }
 }
 
 //********************************************************
 void BurnMessage()
 {
-
-  byte bb;
-  byte y;
-  byte z;
-  char aa;
   byte AscCode;
   byte ArrayPosition;
-  //LetterIndex is global
-  //digitalWrite(ExhaustFanPin, HIGH);
-  delay(500);
-  y = 0;
 
   //Step through MessageTable printing one letter at a time
-  for (bb = 0; bb <= (NumberOfChars - 1); bb++)
+  for (byte bb = 0; bb <= (NumberOfChars - 1); bb++)
   {
     AscCode = MessageTable[bb]; //Message table has a string of ASCII numbers to print, A = 65, a = 97 but it prints A
     if (AscCode == 13)
       break; //13 = enter key
-    //AscLetter = AscCode;
     lcd_print(String(char(AscCode)));
     ArrayPosition = (AscCode - 32); //offset for CharacterArray (ASCII chars start at 32, CharacterArray starts at 0)
     LetterIndex = ArrayPosition;    //vertical index for CharacterArray
     BurnOneLetter();                //writing each letter as it is called
-    delay(200);
   }
-  delay(500);
   ResetDACs();
   //digitalWrite(ExhaustFanPin, LOW);
 }
@@ -543,11 +534,10 @@ TableLoop:
     Beep(3);
     digitalWrite(LASER_EN_PIN, LOW); //turn laser off, if not off
     lcd_clear();                     //clear screen
-    lcd_println("BURN HALTED:");
+    lcd_println("BURN STOPPED:");
     lcd_print("<ENTER>");
     WaitForEnterKey();
     Beep(1);
-    //digitalWrite(ExhaustFanPin, LOW);
   }
   else //used if/else here to replace a recursive call to Start()
   {
@@ -560,7 +550,7 @@ TableLoop:
     //***************************************************
     //SERIAL  X DAC
     digitalWrite(X_SEL, LOW);                                                  //X chip select
-    VoltageToDAC = (((xArrayVal * CharSizeValue) * 6) + BeamGrossHorizOffset); //0 to 1023(measured=2.03mv/count)
+    VoltageToDAC = (((xArrayVal * CharSizeValue) * 7) + BeamGrossHorizOffset); //0 to 1023(measured=2.03mv/count)
     ConvertToTwoBytes();
     SPI.transfer(HighByte);
     SPI.transfer(LowByte);
@@ -568,11 +558,11 @@ TableLoop:
 
     //SERIAL Y DAC
     //You can dynamically adjust vertical position of char on pencil, each time a new char is burned
-    yOffsetValue = analogRead(YOFF_PIN);               //0-1023   1024/16 = 64
-    yOffsetValue = int(yOffsetValue / yOffsetDivisor); //need more offset to get beam on pencil, vertically
+    //yOffsetValue = analogRead(YOFF_PIN);               //0-1023   1024/16 = 64
+    //yOffsetValue = int(yOffsetValue / yOffsetDivisor); //need more offset to get beam on pencil, vertically
 
     digitalWrite(Y_SEL, LOW); //Y chip select
-    VoltageToDAC = ((((yArrayVal * CharSizeValue) + yOffsetValue) * 6) + BeamGrossVerticalOffset);
+    VoltageToDAC = (((((9-yArrayVal) * CharSizeValue) + yOffsetValue) * 7) + BeamGrossVerticalOffset);
     ConvertToTwoBytes();
     SPI.transfer(HighByte);
     SPI.transfer(LowByte);
@@ -600,13 +590,7 @@ TableLoop:
   BurnOneDone:
     i = 0;
 
-    CharSpaceValue = ((analogRead(CSP_PIN)) * 2); //0 to 1023
-    moveStage(-1 * CharSpaceValue);               //move left one letter during burn
-    delay(100);                                   //the number of steps is adjusted earlier by the Char Space knob
-
-    //MoveStageLeftOneLetterDuringBurn();       //the number of steps is adjusted earlier by the Char Space knob
-    delay(TimeForStageToMoveOneCharacter); //Allow time for stage to move over one letter. Increase this
-                                           //delay if the characters are much bigger. Typ for pencil: 1.5 sec
+    moveStage(-50 + (CharSpaceValue * -50));               //move left one letter during burn
   }
 }
 
@@ -652,61 +636,51 @@ void AdjCharSizes()
 {
 
   Beep(1);
-  //parameter adjustment screen
-  //*****************************
-  lcd_clear(); //clear LCD screen
-  lcd_println("ADJUST AS NEEDED:");
   c = 0;
   do
   {
-    //display Burn Time so it can be adjusted
+    lcd_clear();
     BurnDelayValue = analogRead(BRN_PIN);                    //0-1023   pwm = 0-255   Burn =  0 to 150ms
-    BurnDelayValue = int(BurnDelayValue / BurnDelayDivisor); //512ms max
+    BurnDelayValue = int(BurnDelayValue / BurnDelayDivisor); //341ms max
     //move cursor to line 3 (whatever that means?)
     lcd_print("-BURN TIME:");
     lcd_print(String(BurnDelayValue));
     lcd_println("ms.  ");
 
-    //display Character Size so it can be adjusted
     CharSizeValue = analogRead(CHR_PIN);                  //0-1023   1024/100 = 10
     CharSizeValue = int(CharSizeValue / CharSizeDivisor); //
     lcd_print("-CHAR SIZE:");
-    lcd_print(String(CharSizeValue) + "/11");
+    lcd_println(String(CharSizeValue) + "/11");
     lcd_print("<ENTER>");
-    //WaitForEnterKey();   //cannot use this function because it slows down the refresh rate too much
     if (keyboard.available())
     {
       c = keyboard.read();
     }
+    delay(500);
   } while (c != 13);
   Beep(1);
   delay(100);
-
-  //more parameter adjustment
-  //**************************
-  lcd_clear(); //clear LCD screen
-  lcd_println("ADJUST AS NEEDED:");
   c = 0;
   do
   {
+    lcd_clear();
     //display Character Spacing so it can be adjusted
     CharSpaceValue = analogRead(CSP_PIN);                    //0-1023   1024/100 = 10
     CharSpaceValue = int(CharSpaceValue / CharSpaceDivisor); //
     lcd_print("-CHAR SPACE:");
-    lcd_print(String(CharSpaceValue) + "/11");
+    lcd_println(String(CharSpaceValue) + "/11");
 
     //display Beam Vertical position so it can be adjusted
     yOffsetValue = analogRead(YOFF_PIN);               //0-1023   1024/16 = 64
     yOffsetValue = int(yOffsetValue / yOffsetDivisor); //need more offset to get beam on pencil, vertically
     lcd_print("-BEAM VERT:");
-    lcd_print(String(yOffsetValue) + "/64");
+    lcd_println(String(yOffsetValue) + "/64");
     lcd_print("<ENTER>");
-
-    //WaitForEnterKey();    //cannot use this function because it slows down the refresh rate too much
     if (keyboard.available())
     {
       c = keyboard.read();
     }
+    delay(500);
   } while (c != 13);
   Beep(1);
 }
