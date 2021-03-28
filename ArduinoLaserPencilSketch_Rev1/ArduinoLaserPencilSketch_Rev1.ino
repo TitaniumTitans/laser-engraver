@@ -76,7 +76,7 @@ LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x
 #define STG_LEFT_PIN 34  //STG LEFT
 #define STG_RGHT_PIN 32  //STG RIGHT
 #define STG_HOME_PIN 36  //STG HOME
-#define DIR_PIN 13       //DIR on EE-1003
+#define DIR_PIN 13       //DIR_PIN on EE-1003
 #define EN_PIN 12        //EN on EE-1003
 #define STEP_PIN 11      //STEP on EE-1003
 #define BEEP_PIN 27      //BEEP on EE-1003
@@ -97,7 +97,7 @@ LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x
 #define CharSpaceDivisor 90                 //1023/90 = 11 max
 #define yOffsetDivisor 16                   //1023/16 = 64  max Fine vertical offset
 #define TimeForStageToMoveOneCharacter 1500 //set at 1.5 seconds
-#define HomeBackOffSteps 1000               // number of steps to move off of the limit switch during homing.
+#define HomeBackOffSteps 100               // number of steps to move off of the limit switch during homing.
 
 //Declare General Variables
 long x;
@@ -138,7 +138,6 @@ byte LowByte;  //for serial DAC
 //if the #include PS2Keyboard library is used, pin 2 must be used for the PS2 keyboard interrupt
 char c; //or it will not work for all PS-2 keyboards.  Pin 2 = interrupt 0.
 
-void moveStage(int, bool = true, bool = false); //damn you cpp
 
 //CHARACTER ARRAY
 //Array reads DOWN and ACROSS, CharacterArray[DOWN][ACROSS], [96]DOWN [46]ACROSS, CharacterArray[ASCII letter to be burned][x,y burn dot coordinates]
@@ -281,11 +280,17 @@ void setup()
   pinMode(EN_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
   pinMode(SAFETY_PIN, INPUT);
+  pinMode(MS1_PIN, OUTPUT);
+  pinMode(MS2_PIN, OUTPUT);
+
 
   digitalWrite(X_SEL, HIGH); //neg CS for SPI writing in data
   digitalWrite(Y_SEL, HIGH); //neg CS for SPI writing in data
   delay(5);
   digitalWrite(MISO, HIGH);  //neg pulse to latch data to DAC outputs
+
+  digitalWrite(MS1_PIN, LOW);
+  digitalWrite(MS2_PIN, LOW);
 
   //Interrupt calls
   //****************
@@ -779,33 +784,46 @@ void ReadPots()
 //********************************************************************************************************************
 
 /**
- * @brief Moves the stage according to directional input and number of steps.
+ * @brief Moves the stage according to DIR_PINectional input and number of steps.
  * 
  * @param steps Number of steps. Positive for right movement, negative for left movement.
- * @param requireErrorMessage Normally true, set to false if tripping a switch shouldn't send a message (useful during homing)
- * @param ignoreLimits Normally false, set to true if movement should ignore limit switches (useful for backing off a switch)
+ * 
  */
-void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = false)
+void moveStage(int steps) //Forward means stage is moving to the right
 {
-  (steps > 0) ? digitalWrite(DIR_PIN, LOW) : digitalWrite(DIR_PIN, HIGH); //select direction
-  digitalWrite(EN_PIN, LOW);                                              // enable stepper controller
-  for (int i = 0; i <= steps; i++)
+  if (steps > 0){
+    digitalWrite(DIR_PIN,LOW);
+  }else{
+    digitalWrite(DIR_PIN,HIGH);
+  }
+  for (x = 0; x < abs(steps); x++) //Loop the forward stepping enough times for motion to be visible
   {
-    digitalWrite(STEP_PIN, HIGH);
-    delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
-    digitalWrite(STEP_PIN, LOW);
-    delay(50);
-    int limits = checkLimits();
-    if (limits != 0 && ignoreLimits == false)
-    {
-      if (requireErrorMessage)
-      {
-        limitErrorMessage(limits);
+    digitalWrite(STEP_PIN, HIGH); //Trigger one step forward
+    delayMicroseconds(600);
+    digitalWrite(STEP_PIN, LOW); //Pull step pin low so it can be triggered again
+    delayMicroseconds(600);
+    if (digitalRead(LIM2_LEFT_PIN) == LOW or digitalRead(LIM1_RGHT_PIN) == LOW) {
+      if (digitalRead(LIM1_RGHT_PIN) == LOW){
+        digitalWrite(DIR_PIN,HIGH);
+        for (x=0;x<50;x++){
+          digitalWrite(STEP_PIN, HIGH); //Trigger one step forward
+          delay(1);
+          digitalWrite(STEP_PIN, LOW); //Pull step pin low so it can be triggered again
+          delay(1);
+        }
+      }
+      if (digitalRead(LIM2_LEFT_PIN) == LOW){
+        digitalWrite(DIR_PIN,LOW);
+        for (x=0;x<50;x++){
+          digitalWrite(STEP_PIN, HIGH); //Trigger one step forward
+          delay(1);
+          digitalWrite(STEP_PIN, LOW); //Pull step pin low so it can be triggered again
+          delay(1);
+        }
       }
       break;
     }
   }
-  digitalWrite(EN_PIN, HIGH); // disable stepper when we are done.
 }
 
 /**
@@ -814,11 +832,8 @@ void moveStage(int steps, bool requireErrorMessage = true, bool ignoreLimits = f
  */
 void Home()
 {
-  do
-  {
-    moveStage(1, false, true);
-  } while (digitalRead(LIM1_RGHT_PIN) == HIGH);
-  moveStage(-1 * HomeBackOffSteps, false, true);
+  moveStage(10000);
+  moveStage(-1 * HomeBackOffSteps);
   Beep(3);
 }
 
@@ -828,19 +843,22 @@ void Home()
  */
 void ManualHome()
 {
-  do
+  moveStage(10000);
+  moveStage(-1 * HomeBackOffSteps);
+  Beep(3);
+  /* do
   {
-    moveStage(1, false, true); //move stage right
-    if (checkLimits() != 0)    //check limit switch. if it doesnt hit then keep looping.
+    moveStage(10000);
+    if (digitalRead(LIM2_LEFT_PIN) == LOW || digitalRead(LIM1_RGHT_PIN))   //check limit switch. if it doesnt hit then keep looping.
     {
-      moveStage(-1 * HomeBackOffSteps, false, true);
+      moveStage(-1 * HomeBackOffSteps, true);
       Beep(3);
       do
       {
       } while (digitalRead(STG_HOME_PIN) == LOW); //button lockout loop
       //Start(); Originally, this function called Start(); again. I'm not sure why exactly.
     }
-  } while (digitalRead(LIM1_RGHT_PIN) == HIGH);
+  } while (digitalRead(LIM1_RGHT_PIN) == HIGH); */
 }
 /**
  * @brief Invoked when a manual jog function is called.
@@ -863,56 +881,37 @@ void ManualJogFunc(bool left)
   do
   {
     digitalWrite(STEP_PIN, HIGH);
-    delay(50); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
+    delayMicroseconds(600); //delay should be fine to use here, since its only 50ms and the motor only moved 1 step.
     digitalWrite(STEP_PIN, LOW);
-    delay(50);
-    int limits = checkLimits();
-    if (limits != 0)
+    delayMicroseconds(600);
+    if (digitalRead(LIM2_LEFT_PIN) == LOW || digitalRead(LIM1_RGHT_PIN) == LOW)
     {
-      limitErrorMessage(limits);
+      if (digitalRead(LIM1_RGHT_PIN) == LOW){
+        digitalWrite(DIR_PIN,HIGH);
+        for (x=0;x<50;x++){
+          digitalWrite(STEP_PIN, HIGH); //Trigger one step forward
+          delay(1);
+          digitalWrite(STEP_PIN, LOW); //Pull step pin low so it can be triggered again
+          delay(1);
+        }
+      }
+      if (digitalRead(LIM2_LEFT_PIN) == LOW){
+        digitalWrite(DIR_PIN,LOW);
+        for (x=0;x<50;x++){
+          digitalWrite(STEP_PIN, HIGH); //Trigger one step forward
+          delay(1);
+          digitalWrite(STEP_PIN, LOW); //Pull step pin low so it can be triggered again
+          delay(1);
+        }
+      }
+      do {} while (digitalRead(buttonPin) == LOW);
       break;
     }
   } while (digitalRead(buttonPin) == LOW); //button lockout loop
 }
 
-/**
- * @brief Checks values of limit switches.
- * 
- * @return int Returns -1 if right switch is tripped, 1 if left and 0 if normal.
- */
-int checkLimits()
-{
-  if (digitalRead(LIM1_RGHT_PIN) == 0)
-  {
-    return -1;
-  }
-  if (digitalRead(LIM2_LEFT_PIN) == 0)
-  {
-    return 1;
-  }
-  return 0;
-}
 
-/**
- * @brief Displays an error message if the stage is moved too far.
- * 
- * @param limits Input the return value from checkLimits()
- */
-void limitErrorMessage(int limits)
-{
-  if (limits != 0)
-  {
-    digitalWrite(LASER_EN_PIN, LOW); //disable laser output if on
-    lcd_clear();
-    lcd_println("ERROR:");
-    lcd_println("STAGE MOVED TOO FAR");
-    String direction = ((limits > 0) ? "LEFT" : "RIGHT");
-    lcd_println(direction + ", REVERSE"); //pick what error message to use
-    lcd_println("DIRECTION");
-    moveStage(800 * limits, false, true); //since checkLimits returns -1 if right switch tripped, it will move -800 steps (or left 800 steps). If left is tripped, then it will move right!
-    Beep(3);
-  }
-}
+
 
 //**************************************************************************************************************************************
 //                                                       LCD Functions
