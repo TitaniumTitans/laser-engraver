@@ -57,7 +57,7 @@ int lcd_editMode_maxLen = 0; // The maximum length of lcd_editMode_input.
 // Internally set to true while using the print functions during edit mode.
 bool lcd_editMode_printOverride = false;
 // SoME commenT
-const char *lcd_editMode_prompt = "Edit Below:";
+const char *lcd_editMode_prompt;
 char *lcd_editMode_input;
 
 LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x27 for a 20 chars and 4 line display
@@ -413,6 +413,42 @@ void MessageFormatting()
 //************************************************************
 void TypeNewMessage()
 {
+  lcd_clear();
+  char c;
+  
+  lcd_editMode_prompt = "Enter message:";
+  lcd_editMode_init(MessageTable, 40);
+  
+  lcd_editMode = true;
+  lcd_repaint();
+  
+  for (;;) {
+    while (!keyboard.available()) delay(10);
+    
+    c = keyboard.read();
+    
+    switch (c) {
+    case '\r': // CR, carriage return. The enter key.
+      Beep(2);
+      NumberOfChars = lcd_editMode_off();
+      return;
+    case (char)127: // DEL. Backspace key. (Is that normal?)
+      if (lcd_editMode_backsp()) {
+        Beep(1);
+      }
+      break;
+    default: // Any other character. TODO NEXT: only run lcd_editMode_type on ASCII printables.
+      if (lcd_editMode_type(c)) {
+        Beep(1);
+        lcd_clear();
+        lcd_print("40 CHARACTER MAXIMUM");
+      }
+      break;
+    }
+  }
+}
+/*void TypeNewMessage()
+{
 
   int cnt = 0;
   int ch;
@@ -453,7 +489,7 @@ void TypeNewMessage()
   }
   Beep(2);
   NumberOfChars = cnt;
-}
+}*/
 
 //*********************************************************
 
@@ -773,9 +809,9 @@ void moveStage(int steps) //Forward means stage is moving to the right
   for (x = 0; x < abs(steps); x++) //Loop the forward stepping enough times for motion to be visible
   {
     digitalWrite(STEP_PIN, HIGH); //Trigger one step forward
-    delayMicroseconds(600);
+    delayMicroseconds(700);
     digitalWrite(STEP_PIN, LOW); //Pull step pin low so it can be triggered again
-    delayMicroseconds(600);
+    delayMicroseconds(700);
     if (digitalRead(LIM2_LEFT_PIN) == LOW or digitalRead(LIM1_RGHT_PIN) == LOW) {
       if (digitalRead(LIM1_RGHT_PIN) == LOW){
         digitalWrite(DIR_PIN,HIGH);
@@ -962,6 +998,55 @@ void lcd_print(String text)
   }
 }
 /**
+ * @brief lcd_print(), except without scrolling, switching screens, and more.
+ * 
+ */
+void lcd_print_direct(char *text, uint8_t lcd_x, uint8_t lcd_y) {
+  lcd.setCursor(lcd_x, lcd_y);
+  
+  char currentChar;
+  for (int i = 0; ; i++)
+  {
+    currentChar = text[i];
+
+    if (currentChar == '\n')
+    {
+      // NEWLINE:
+      lcd_x = 0;
+      lcd_y++;
+      if (lcd_y == lcd_height)
+      {
+        break; // Out of screen
+      } else {
+        lcd.setCursor(lcd_x, lcd_y);
+      }
+      continue;
+    }
+    else if (currentChar == '\0')
+    {
+      break;
+    }
+
+    lcd.write(currentChar);
+    lcd_x++;
+
+    // If at right end of screen:
+    if (lcd_x == lcd_width)
+    {
+      // NEWLINE:
+      lcd_x = 0;
+      lcd_y++;
+      if (lcd_y == lcd_height)
+      {
+        break; // Out of screen
+      } else {
+        lcd.setCursor(lcd_x, lcd_y);
+      }
+    }
+  }
+}
+
+/**
  * @brief Clears the console screen.
  * 
  */
@@ -1039,25 +1124,29 @@ void lcd_repaint()
   {
     lcd.print(lcd_editMode_prompt);
     
-    uint8_t ixw; // i times lcd_width
-    char tempChar; // Certain characters will need to be temporarily replaced with '\0' while printing lines.
-    // Print the lines of input, stopping when there are no more lines or a line is empty:
-    for (uint8_t i = 0; i <= lcd_height-1; i++) {
-      ixw = i*lcd_width;
-      
-      lcd.setCursor(0, i + 1);
-      
-      if (ixw+lcd_width > lcd_editMode_maxLen) { // If this line is the last, don't add the null char.
-        lcd.print(&(lcd_editMode_input[ixw]));
-      } else {
-        tempChar = lcd_editMode_input[ixw];
-        lcd_editMode_input[ixw] = '\0';
-        
-        lcd.print(&(lcd_editMode_input[ixw]));
-        
-        lcd_editMode_input[ixw] = tempChar;
-      }
-    }
+    /*if (lcd_editMode_maxLen != 0) {
+		  uint8_t ixw = 0; // i times lcd_width
+		  char tempChar; // Certain characters will need to be temporarily replaced with '\0' while printing lines.
+		  // Print the lines of input, stopping when there are no more lines or a line is empty:
+		  for (uint8_t i = 0; (i <= lcd_height-1) && (lcd_editMode_input[ixw] != '\0'); i++) {
+		    ixw = i*lcd_width;
+		    
+		    lcd.setCursor(0, i + 1);
+		    
+		    if (ixw+lcd_width > lcd_editMode_maxLen) { // If this line is the last, don't add the null char.
+		      lcd.print(lcd_editMode_input[ixw]);
+		    } else {
+		      tempChar = lcd_editMode_input[ixw];
+		      lcd_editMode_input[ixw] = '\0';
+		      
+		      lcd.print(lcd_editMode_input[ixw]);
+		      
+		      lcd_editMode_input[ixw] = tempChar;
+		    }
+		  }
+    }*/
+    // Phew that ^ was complicated. And didn't work. So here's a much easier way that is slightly slower:
+    lcd_print_direct(lcd_editMode_input, 0, 1);
     
     // Set the position of the cursor:
     lcd_editMode_posCur();
@@ -1080,7 +1169,7 @@ void lcd_repaint()
 }
 
 /**
- * @brief Turns edit mode on, switching to the input screen and prompting the user for text input.
+ * @brief Prepares edit mode.
  * Set the lcd_editMode_prompt variable to the prompt string.
  * 
  * @param input The input buffer to use. The length MUST BE THIS LENGTH OR SHORTER: lcd_width*(lcd_height-1)+1-1. (One row less, for the prompt. One element more and one element less, for '\0' and physical space for the cursor). The input buffer is allowed to already have text in it, but all other characters must be '\0'.
@@ -1094,15 +1183,12 @@ void lcd_editMode_init(char *input, int maxLen)
   
   lcd_editMode_len = 0;
   lcd_editMode_i = 0;
-  
-  lcd_editMode = true;
-  lcd_repaint();
 }
 
 /**
- * @brief Switch to the console screen.
+ * @brief Switch to the console screen:
  * The text that was previously on the screen will be displayed again.
- * Use the input buffer supplied to lcd_editMode_on() contains the inputted text.
+ * Use the input buffer supplied to lcd_editMode_on(), which contains the inputted text.
  * 
  * 
  */
@@ -1114,7 +1200,7 @@ int lcd_editMode_off()
   return lcd_editMode_len;
 }
 
-void lcd_editMode_type(char c)
+bool lcd_editMode_type(char c)
 {
   if (!lcd_editMode) {
     lcd_editMode = true;
@@ -1122,8 +1208,7 @@ void lcd_editMode_type(char c)
   }
   
   if (lcd_editMode_len == lcd_editMode_maxLen) {
-    Beep(1);
-    return;
+    return true;
   }
   
   // If the cursor has been moved from the end of the input, shift characters 1 to the right:
@@ -1142,13 +1227,15 @@ void lcd_editMode_type(char c)
     // Set the position of the cursor:
     lcd_editMode_posCur();
   }
+  
+  return false;
 }
 
 /**
- * @brief Backspace.
+ * @brief Backspace. Returns true if there is nothing to delete, false otherwise.
  * 
  */
-void lcd_editMode_backsp()
+bool lcd_editMode_backsp()
 {
   if (!lcd_editMode) {
     lcd_editMode = true;
@@ -1156,14 +1243,14 @@ void lcd_editMode_backsp()
   }
   
   if (lcd_editMode_i == 0) {
-    Beep(1);
-    return;
+    return true;
   }
   
   if (lcd_editMode_i != lcd_editMode_len) {
     // TODO: do the shifting. Also, line editing.
- 	}
+  }
   
+  lcd_editMode_len--;
   lcd_editMode_i--;
   lcd_editMode_input[lcd_editMode_i] = '\0';
   
@@ -1171,6 +1258,8 @@ void lcd_editMode_backsp()
   lcd_editMode_posCur();
   lcd.write(' ');
   lcd_editMode_posCur();
+  
+  return false;
 }
 
 /**
