@@ -51,7 +51,7 @@ uint8_t lcd_screen_wrap = 0;
 
 // LCD text editing:
 bool lcd_editMode = false;
-int lcd_editMode_i = 0; // The position of the text input caret.
+int lcd_editMode_i = 0; // The position of the text input caret. Equals lcd_editMode_len if the caret is at the end of the currently inputted text.
 int lcd_editMode_len = 0; // The current length of inputted text.
 int lcd_editMode_maxLen = 0; // The maximum length of lcd_editMode_input.
 // Internally set to true while using the print functions during edit mode.
@@ -96,6 +96,8 @@ LiquidCrystal_I2C lcd(0x27, lcd_width, lcd_height); // set the LCD address to 0x
 #define CharSpaceDivisor 90                 //1023/90 = 11 max
 #define yOffsetDivisor 16                   //1023/16 = 64  max Fine vertical offset
 #define HomeBackOffSteps 100               // number of steps to move off of the limit switch during homing.
+
+#define IDLE_DELAY 100 // The amount of milliseconds delayed repeatedly in idle loops
 
 //Declare General Variables
 long x;
@@ -332,50 +334,52 @@ void loop()
 void Start()
 {
   printStartMenu();
-Loop1:
-  if ((digitalRead(STG_LEFT_PIN)) == 0)
-    ManualJogFunc(true);
-  if ((digitalRead(STG_RGHT_PIN)) == 0)
-    ManualJogFunc(false);
-  if ((digitalRead(STG_HOME_PIN)) == 0)
-    ManualHome();
+  for (;;) {
+    if ((digitalRead(STG_LEFT_PIN)) == 0)
+      ManualJogFunc(true);
+    if ((digitalRead(STG_RGHT_PIN)) == 0)
+      ManualJogFunc(false);
+    if ((digitalRead(STG_HOME_PIN)) == 0)
+      ManualHome();
 
-  if (keyboard.available())
-  {
-    c = keyboard.read();
-    if (c == 49) // 1.NEW MESSAGE
+    if (keyboard.available())
     {
-      Beep(1);
-      ReadPots();
-      MessageFormatting();
-      TypeNewMessage();
-      BurnMessageSequence();
-      printStartMenu();
-    }
+      c = keyboard.read();
+      if (c == 49) // 1.NEW MESSAGE
+      {
+        Beep(1);
+        ReadPots();
+        MessageFormatting();
+        TypeNewMessage();
+        BurnMessageSequence();
+        printStartMenu();
+      }
 
-    if (c == 50) // 2. REPEAT BURN (comment from sam: what happens if you press this when you hadn't burned already)
-    {
-      lcd_clear();
-      Beep(1);
-      BurnMessageSequence();
-      printStartMenu();
-    }
+      if (c == 50) // 2. REPEAT BURN (comment from sam: what happens if you press this when you hadn't burned already)
+      {
+        lcd_clear();
+        Beep(1);
+        BurnMessageSequence();
+        printStartMenu();
+      }
 
-    if (c == 51) // 3. CHARACTER ADJUST
-    {
-      lcd_clear();
-      Beep(1);
-      AdjCharSizes();
-      printStartMenu();
-    }
+      if (c == 51) // 3. CHARACTER ADJUST
+      {
+        lcd_clear();
+        Beep(1);
+        AdjCharSizes();
+        printStartMenu();
+      }
 
-    if ((c <= 48) || (c >= 52)) //error check for incorrect keyboard choices
-    {
-      Beep(2);
-      goto Loop1;
+      if ((c <= 48) || (c >= 52)) //error check for incorrect keyboard choices
+      {
+        Beep(2);
+        continue;
+      }
     }
+    
+    delay(IDLE_DELAY);
   }
-  goto Loop1;
 }
 
 void printStartMenu(){
@@ -414,7 +418,9 @@ void MessageFormatting()
 void TypeNewMessage()
 {
   lcd_clear();
+  
   char c;
+  bool lastErrorWasUnsupportedChar = false;
   
   lcd_editMode_prompt = "Enter message:";
   lcd_editMode_init(MessageTable, 40);
@@ -426,22 +432,73 @@ void TypeNewMessage()
     while (!keyboard.available()) delay(10);
     
     c = keyboard.read();
-    
+    /*PS2_KC_BREAK
+      PS2_KC_ENTER
+      PS2_KC_ESC
+      PS2_KC_KPLUS
+      PS2_KC_KMINUS
+      PS2_KC_KMULTI
+      PS2_KC_NUM
+      PS2_KC_BKSP*/
     switch (c) {
-    case '\r': // CR, carriage return. The enter key.
+    case PS2_ENTER:
       Beep(2);
       NumberOfChars = lcd_editMode_off();
       return;
-    case (char)127: // DEL. Backspace key. (Is that normal?)
+    case PS2_DELETE: // Backspace key or Delete key.
       if (lcd_editMode_backsp()) {
         Beep(1);
       }
       break;
-    default: // Any other character. TODO NEXT: only run lcd_editMode_type on ASCII printables.
-      if (lcd_editMode_type(c)) {
+    case PS2_LEFTARROW:
+      if (lcd_editMode_setCursor(lcd_editMode_i - 1)) {
         Beep(1);
-        lcd_clear();
-        lcd_print("40 CHARACTER MAXIMUM");
+      }
+      break;
+    case PS2_RIGHTARROW:
+      if (lcd_editMode_setCursor(lcd_editMode_i + 1)) {
+        Beep(1);
+      }
+      break;
+    case PS2_UPARROW:
+      if (lcd_editMode_setCursor(lcd_editMode_i - lcd_width)) {
+        Beep(1);
+      }
+      break;
+    case PS2_DOWNARROW:
+      if (lcd_editMode_setCursor(lcd_editMode_i + lcd_width)) {
+        Beep(1);
+      }
+      break;
+    default: // Any other character.
+      if (c >= 32 && c <= 127) { // 32 = ' ' and 127 = '~'. The ASCII printables.
+        if (CharacterArray[c - 32][1] != 0) { // If the character is in the character array:
+          if (lcd_editMode_type(c)) {
+            Beep(1);
+            lcd_clear();
+            lcd_print("40 CHARACTER MAXIMUM");
+            
+            lastErrorWasUnsupportedChar = false;
+          }
+        } else {
+          Beep(1);
+          if (!lastErrorWasUnsupportedChar) {
+            lcd_clear();
+          } else {
+            lcd_lineBreak();
+          }
+          lcd_print(String(c));
+          lcd_print(" NOT SUPPORTED");
+          
+          // This might help out users who don't understand the concept of printing and scrolling yet:
+          if (lastErrorWasUnsupportedChar) {
+            lcd_print(" TOO");
+          }
+          
+          lastErrorWasUnsupportedChar = true;
+        }
+      } else { // Unused keyboard button:
+        Beep(1);
       }
       break;
     }
@@ -745,13 +802,26 @@ void ResetDACs()
 }
 
 //********************************************************
-void Beep(int y)
+void Beep(int beeps)
 {
-  for (x = 1; x <= y; x++)
+  /*for (x = 1; x <= y; x++)
   {
     digitalWrite(BEEP_PIN, HIGH);
     delay(100);
     digitalWrite(BEEP_PIN, LOW);
+    delay(100);
+  }*/
+  
+  if (beeps == 0) return;
+  
+  for (int i = 0; ;) { // loop-and-a-half
+    digitalWrite(BEEP_PIN, HIGH);
+    delay(100);
+    digitalWrite(BEEP_PIN, LOW);
+    
+    i++;
+    if (i == beeps) break;
+    
     delay(100);
   }
 }
@@ -759,16 +829,16 @@ void Beep(int y)
 //*********************************************************
 void WaitForEnterKey()
 {
-
+  char c;
   do
   {
     if (keyboard.available())
     {
       c = keyboard.read();
     }
-  } while (c != 13); // a 13 (CR or ENTER)
-  c = 0;
-  delay(300);
+    delay(IDLE_DELAY);
+  } while (c != PS2_ENTER);
+  delay(300); // TODO: why is this here?
 }
 
 //**********************************************************
@@ -1211,54 +1281,88 @@ bool lcd_editMode_type(char c)
     return true;
   }
   
-  // If the cursor has been moved from the end of the input, shift characters 1 to the right:
+  // (Part of text editing) If the caret is not at the end of the input, shift characters 1 to the right:
   if (lcd_editMode_i != lcd_editMode_len) {
-    // TODO: do the shifting. Also, line editing.
+    for (int i = lcd_editMode_len - 1; i >= lcd_editMode_i; i--) {
+      lcd_editMode_input[i+1] = lcd_editMode_input[i];
+    }
   }
   
   lcd_editMode_input[lcd_editMode_i] = c;
   lcd_editMode_len++;
   lcd_editMode_i++;
   
-  lcd.write(c);
-  
-  // Reposition the cursor if it's at the end of the line:
-  if (lcd_editMode_i % lcd_width == 0) {
-    // Set the position of the cursor:
-    lcd_editMode_posCur();
+  if (lcd_editMode_i != lcd_editMode_len) {
+    lcd_repaint();
+  } else {
+    lcd.write(c);
+    
+    // Reposition the cursor if it's at the end of the line:
+    if (lcd_editMode_i % lcd_width == 0) {
+      // Set the position of the cursor:
+      lcd_editMode_posCur();
+    }
   }
   
   return false;
 }
 
 /**
- * @brief Backspace. Returns true if there is nothing to delete, false otherwise.
+ * @brief Backspace. Returns true if the cursor is all the way to the left, false otherwise.
  * 
  */
 bool lcd_editMode_backsp()
+{
+  // The usual `if (!lcd_editMode)` part is somewhere below. One advantage is that this way prevents lcd_redraw() from being called twice, which would happen if lcd_editMode==false and the caret is not at the end.
+  
+  if (lcd_editMode_i == 0) {
+    return true;
+  }
+  
+  // Delete the character:
+  lcd_editMode_len--;
+  lcd_editMode_i--;
+  lcd_editMode_input[lcd_editMode_i] = '\0';
+  
+  // (Part of text editing) If the caret is not at the end of the input, shift characters 1 to the left:
+  if (lcd_editMode_i != lcd_editMode_len) {
+    // TODO: do the shifting.
+    for (int i = lcd_editMode_i; i < lcd_editMode_len + 1; i++) {
+      lcd_editMode_input[i] = lcd_editMode_input[i+1];
+    }
+    lcd_editMode = true; // In case it wasn't (which is possible).
+    lcd_repaint();
+  } else {
+    // Clear the backspace-d character:
+    if (!lcd_editMode) {
+      lcd_editMode = true;
+      lcd_repaint();
+    } else {
+      lcd_editMode_posCur();
+      lcd.write(' ');
+      lcd_editMode_posCur();
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * @brief Reposition the LCD cursor in editMode. Returns true if the cursor cannot be positioned there.
+ */
+bool lcd_editMode_setCursor(int index)
 {
   if (!lcd_editMode) {
     lcd_editMode = true;
     lcd_repaint();
   }
   
-  if (lcd_editMode_i == 0) {
+  if (index < 0 || index > lcd_editMode_len) {
     return true;
   }
   
-  if (lcd_editMode_i != lcd_editMode_len) {
-    // TODO: do the shifting. Also, line editing.
-  }
-  
-  lcd_editMode_len--;
-  lcd_editMode_i--;
-  lcd_editMode_input[lcd_editMode_i] = '\0';
-  
-  // Clear the backspace-d character
+  lcd_editMode_i = index;
   lcd_editMode_posCur();
-  lcd.write(' ');
-  lcd_editMode_posCur();
-  
   return false;
 }
 
