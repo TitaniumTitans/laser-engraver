@@ -31,6 +31,7 @@ Program memory space: 258K bytes
 Program memory used: 16K bytes
 Available interrupt pins: 2,3,21,20,19,18 (int0,1,2,3,4,5)
 40 characters = ~4 inches on a pencil.
+I changed the limit to 30 characters.
 */
 
 #include <PS2Keyboard.h> //Keyboard
@@ -396,8 +397,15 @@ void MessageFormatting()
   int cnt;
   byte ch;
   byte storedChar;
-
+  
   lcd_clear();
+  lcd_println("30 CHARACTER");
+  lcd_println("MAXIMUM.");
+  lcd_print("PLEASE PRESS ENTER");
+  WaitForEnterKey();
+  Beep(1);
+  
+  /*lcd_clear();
   lcd_println("-MESSAGE PARAMETERS");
   lcd_println(" 40 CHAR MAXIMUM = ");
   lcd_println(" 2 LINES ON LCD");
@@ -411,7 +419,7 @@ void MessageFormatting()
   lcd_println("-DO <ENTER> NOW TO"); 
   lcd_print(" OPEN TYPING WINDOW");
   WaitForEnterKey();
-  Beep(1);
+  Beep(1);*/
 }
 
 //************************************************************
@@ -422,8 +430,11 @@ void TypeNewMessage()
   char c;
   bool lastErrorWasUnsupportedChar = false;
   
+  // Clear the MessageTable input buffer:
+  for (int i = 0; i < 30; i++) MessageTable[i] = '\0';
+  
   lcd_editMode_prompt = "Enter message:";
-  lcd_editMode_init(MessageTable, 40);
+  lcd_editMode_init(MessageTable, 30);
   
   lcd_editMode = true;
   lcd_repaint();
@@ -476,7 +487,7 @@ void TypeNewMessage()
           if (lcd_editMode_type(c)) {
             Beep(1);
             lcd_clear();
-            lcd_print("40 CHARACTER MAXIMUM");
+            lcd_print("30 CHARACTER MAXIMUM");
             
             lastErrorWasUnsupportedChar = false;
           }
@@ -562,7 +573,6 @@ void BurnMessageSequence()
   Beep(1);
   lcd_clear();
   lcd_println("-MOUNT PENCIL");
-  lcd_println("-PUT ON GOOGLES");
   lcd_println("-PUSH BURN BUTTON OR");
   lcd_print(" HOLD STOP TO QUIT");
   do
@@ -584,8 +594,8 @@ void BurnMessageSequence()
     Beep(1);
   }else {
     lcd_clear();
-    lcd_println("-Burn Cycle Stop");
-    lcd_println("-Return to Menu");
+    lcd_println("-BURN CYCLE STOP");
+    lcd_println("-RETURN TO MENU");
     lcd_println("<ENTER>");
     WaitForEnterKey();
     Beep(1);
